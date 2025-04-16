@@ -243,7 +243,7 @@ class WeatherDatabase:
                 WHERE location_id = :location_id
                 AND parameter_code = :parameter_code
                 AND forecast_time >= NOW()
-                AND forecast_time <= NOW() + INTERVAL :hours_limit HOUR
+                AND forecast_time <= NOW() + (INTERVAL '1 hour' * :hours_limit)
                 ORDER BY forecast_time ASC
             """)
             
@@ -251,7 +251,7 @@ class WeatherDatabase:
                 result = connection.execute(query, {
                     "location_id": location_id, 
                     "parameter_code": parameter_code,
-                    "hours_limit": hours_limit
+                    "hours_limit": str(hours_limit)
                 })
                 
                 rows = result.fetchall()

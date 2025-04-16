@@ -7,9 +7,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import time
+from sqlalchemy import text
 from utils.data_fetcher import MeteoDataFetcher
 from utils.data_processor import WeatherDataProcessor
 from utils.visualizations import WeatherVisualizer
+from utils.database import db
 import json
 import requests
 import logging
@@ -242,6 +244,91 @@ with st.sidebar:
         elif 'additional_params' not in st.session_state:
             st.session_state.additional_params = []
     
+    # Database/Cache section
+    st.header("Database Cache")
+    
+    # Get recent locations from database
+    recent_locations = db.get_recent_locations(limit=5)
+    
+    if recent_locations:
+        st.markdown("#### Recently Searched Locations")
+        for loc in recent_locations:
+            if st.button(f"{loc['name']}", key=f"loc_{loc['id']}"):
+                st.session_state.location = {
+                    "lat": loc['lat'],
+                    "lon": loc['lon'],
+                    "display_name": loc['name']
+                }
+                st.rerun()
+    
+    # Display model run info
+    latest_run = db.get_latest_model_run("GDPS")
+    if latest_run:
+        st.markdown(f"**Latest GDPS Model Run:** {latest_run.strftime('%Y-%m-%d %H:%M UTC')}")
+    
+    # Database statistics
+    with st.expander("Database Statistics"):
+        # Get database stats
+        try:
+            with db.engine.connect() as connection:
+                # Count of locations
+                location_count = connection.execute(
+                    text("SELECT COUNT(*) FROM locations")
+                ).scalar()
+                
+                # Count of forecast data points
+                forecast_count = connection.execute(
+                    text("SELECT COUNT(*) FROM forecast_data")
+                ).scalar()
+                
+                # Count of warnings
+                warning_count = connection.execute(
+                    text("SELECT COUNT(*) FROM weather_warnings")
+                ).scalar()
+                
+                # Count of model runs
+                model_run_count = connection.execute(
+                    text("SELECT COUNT(*) FROM model_runs")
+                ).scalar()
+                
+                # Recent parameter distribution
+                parameter_dist = connection.execute(
+                    text("""
+                        SELECT parameter_code, COUNT(*) as count
+                        FROM forecast_data
+                        GROUP BY parameter_code
+                        ORDER BY count DESC
+                        LIMIT 5
+                    """)
+                ).fetchall()
+                
+                # Display stats
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Locations Stored", location_count)
+                    st.metric("Model Runs Tracked", model_run_count)
+                
+                with col2:
+                    st.metric("Forecast Data Points", forecast_count)
+                    st.metric("Weather Warnings", warning_count)
+                
+                # Parameter distribution
+                if parameter_dist:
+                    st.markdown("#### Parameters in Database")
+                    param_data = pd.DataFrame(parameter_dist, columns=["Parameter", "Count"])
+                    st.bar_chart(param_data.set_index("Parameter"))
+                
+        except Exception as e:
+            st.error(f"Error fetching database statistics: {e}")
+    
+    # Cache clear button
+    if st.button("Clear Old Forecast Data (>7 days)"):
+        success = db.clear_old_data(days_to_keep=7)
+        if success:
+            st.success("Successfully cleared old forecast data")
+        else:
+            st.error("Failed to clear old data")
+    
     # About section
     st.header("About")
     st.markdown("""
@@ -252,6 +339,7 @@ with st.sidebar:
     - Supports forecasts up to 168 hours (7 days) ahead
     - Detailed visualizations of temperature, precipitation, wind, pressure, and more
     - Severe weather warning detection
+    - PostgreSQL database caching for improved performance
     """)
 
 # Main content
