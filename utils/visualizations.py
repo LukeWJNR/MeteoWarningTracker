@@ -208,23 +208,31 @@ class WeatherVisualizer:
                 lons = grid_data['lon']
                 values = grid_data['values']
                 
+                # Flatten values for min/max calculation if nested list
+                flat_values = []
+                for row in values:
+                    if isinstance(row, list):
+                        flat_values.extend(row)
+                    else:
+                        flat_values.append(row)
+                
                 # Determine color scale and range based on parameter
                 if 'temperature' in parameter.lower():
                     colormap = linear.RdBu_11.scale(
-                        min(values.flatten()),
-                        max(values.flatten())
+                        min(flat_values),
+                        max(flat_values)
                     )
                     colormap_name = 'Temperature (°C)'
                 elif 'precipitation' in parameter.lower():
-                    colormap = linear.Blues_09.scale(0, max(max(values.flatten()), 0.1))
+                    colormap = linear.Blues_09.scale(0, max(max(flat_values), 0.1))
                     colormap_name = 'Precipitation (mm)'
                 elif 'wind' in parameter.lower():
-                    colormap = linear.YlOrRd_09.scale(0, max(max(values.flatten()), 1))
+                    colormap = linear.YlOrRd_09.scale(0, max(max(flat_values), 1))
                     colormap_name = 'Wind Speed (km/h)'
                 else:
                     colormap = linear.viridis.scale(
-                        min(values.flatten()),
-                        max(values.flatten())
+                        min(flat_values),
+                        max(flat_values)
                     )
                     colormap_name = parameter
                 
