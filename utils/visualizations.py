@@ -7,6 +7,7 @@ from folium.plugins import HeatMap, MarkerCluster
 from branca.colormap import linear
 import streamlit as st
 import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
 import logging
 
 # Configure logging
@@ -202,11 +203,11 @@ class WeatherVisualizer:
             # Add marker for selected location
             folium.Marker(
                 [lat, lon],
-                popup="Selected Location",
+                popup=f"Lat: {lat:.4f}, Lon: {lon:.4f}",
                 icon=folium.Icon(color="red", icon="info-sign")
             ).add_to(m)
             
-            # If grid data is available, add it to map
+            # Case 1: Check for structured grid data format
             if grid_data and 'lat' in grid_data and 'lon' in grid_data and 'values' in grid_data:
                 lats = grid_data['lat']
                 lons = grid_data['lon']
@@ -216,69 +217,190 @@ class WeatherVisualizer:
                 flat_values = []
                 for row in values:
                     if isinstance(row, list):
-                        flat_values.extend(row)
-                    else:
+                        flat_values.extend([v for v in row if v is not None])
+                    elif row is not None:
                         flat_values.append(row)
+                
+                # Skip if not enough valid values
+                if len(flat_values) < 2:
+                    logger.warning("Not enough valid data points for map visualization")
+                    return m
+                
+                # Get min/max for proper scaling
+                min_val = min(flat_values)
+                max_val = max(flat_values)
                 
                 # Determine color scale and range based on parameter
                 if 'temperature' in parameter.lower():
-                    colormap = linear.RdBu_11.scale(
-                        min(flat_values),
-                        max(flat_values)
-                    )
+                    colormap = linear.RdBu_11.scale(min_val, max_val)
                     colormap_name = 'Temperature (°C)'
                 elif 'precipitation' in parameter.lower():
-                    colormap = linear.Blues_09.scale(0, max(max(flat_values), 0.1))
+                    colormap = linear.Blues_09.scale(0, max(max_val, 0.1))
                     colormap_name = 'Precipitation (mm)'
                 elif 'wind' in parameter.lower():
-                    colormap = linear.YlOrRd_09.scale(0, max(max(flat_values), 1))
+                    colormap = linear.YlOrRd_09.scale(0, max(max_val, 1))
                     colormap_name = 'Wind Speed (km/h)'
+                elif 'humidity' in parameter.lower() or 'cloud' in parameter.lower():
+                    colormap = linear.Blues_09.scale(0, 100)  # Percentage scale
+                    colormap_name = f"{parameter} (%)"
+                elif 'pressure' in parameter.lower():
+                    colormap = linear.Spectral_11.scale(min_val, max_val)
+                    colormap_name = 'Pressure (hPa)'
                 else:
-                    colormap = linear.viridis.scale(
-                        min(flat_values),
-                        max(flat_values)
-                    )
+                    colormap = linear.viridis.scale(min_val, max_val)
                     colormap_name = parameter
                 
                 # Add the color map to the main map
                 colormap.caption = colormap_name
                 colormap.add_to(m)
                 
-                # Add data as a heatmap layer
-                heat_data = []
-                for i in range(len(lats)):
-                    for j in range(len(lons)):
-                        # Ensure all values are properly converted to float
-                        try:
-                            lat_val = float(lats[i])
-                            lon_val = float(lons[j])
-                            data_val = float(values[i][j])
-                            heat_data.append([lat_val, lon_val, data_val])
-                        except (ValueError, TypeError, IndexError) as e:
-                            logger.error(f"Error processing heatmap data point: {e}")
-                            continue
-                
-                # Use more natural color gradient depending on parameter type
-                if 'temperature' in parameter.lower():
-                    gradient_dict = {"0": 'blue', "0.25": 'lightblue', "0.5": 'yellow', "0.75": 'orange', "1": 'red'}
-                elif 'precipitation' in parameter.lower():
-                    gradient_dict = {"0": 'green', "0.33": 'lightblue', "0.66": 'blue', "1": 'darkblue'}
-                elif 'wind' in parameter.lower():
-                    gradient_dict = {"0": 'lightblue', "0.33": 'lightgreen', "0.66": 'yellow', "1": 'red'}
+                # Check if we have a 2D grid of values
+                if all(isinstance(row, list) for row in values):
+                    # This is a full 2D grid, use image overlay for more precise rendering
+                    try:
+                        # Convert to numpy array
+                        values_array = np.array(values)
+                        
+                        # If we have a proper rectangle grid, use image overlay
+                        if len(lats) >= 2 and len(lons) >= 2:
+                            # Define the bounds for the image overlay (SW and NE corners)
+                            bounds = [
+                                [min(lats), min(lons)],  # SW corner
+                                [max(lats), max(lons)]   # NE corner
+                            ]
+                            
+                            from folium.raster_layers import ImageOverlay
+                            from matplotlib.colors import LinearSegmentedColormap
+                            
+                            # Create a matplotlib colormap that matches our folium colormap
+                            if 'temperature' in parameter.lower():
+                                cmap = plt.cm.RdBu_r
+                            elif 'precipitation' in parameter.lower():
+                                cmap = plt.cm.Blues
+                            elif 'wind' in parameter.lower():
+                                cmap = plt.cm.YlOrRd
+                            elif 'humidity' in parameter.lower() or 'cloud' in parameter.lower():
+                                cmap = plt.cm.Blues
+                            elif 'pressure' in parameter.lower():
+                                cmap = plt.cm.Spectral_r
+                            else:
+                                cmap = plt.cm.viridis
+                            
+                            # Normalize the data between 0 and 1
+                            norm_data = (values_array - min_val) / (max_val - min_val)
+                            
+                            # Create a matplotlib figure to generate the image
+                            fig, ax = plt.subplots(figsize=(10, 10))
+                            img = ax.imshow(norm_data, cmap=cmap, interpolation='bilinear')
+                            ax.axis('off')
+                            plt.tight_layout(pad=0)
+                            
+                            # Save to a temporary buffer
+                            import io
+                            buf = io.BytesIO()
+                            plt.savefig(buf, format='png', dpi=100, bbox_inches='tight', pad_inches=0)
+                            buf.seek(0)
+                            
+                            # Add image overlay to map
+                            ImageOverlay(
+                                buf,
+                                bounds=bounds,
+                                opacity=0.7,
+                                cross_origin=False,
+                                zindex=1
+                            ).add_to(m)
+                            
+                            plt.close(fig)
+                            
+                        else:
+                            # Fall back to heatmap for irregular grids
+                            self._add_data_as_heatmap(m, lats, lons, values, min_val, max_val, parameter)
+                            
+                    except Exception as e:
+                        logger.error(f"Error creating image overlay: {e}")
+                        # Fall back to heatmap
+                        self._add_data_as_heatmap(m, lats, lons, values, min_val, max_val, parameter)
                 else:
-                    gradient_dict = {"0": 'blue', "0.25": 'cyan', "0.5": 'lime', "0.75": 'yellow', "1": 'red'}
+                    # This is a 1D list of values, use heatmap
+                    self._add_data_as_heatmap(m, lats, lons, values, min_val, max_val, parameter)
                 
-                # Adjust radius and blur based on data density
-                data_density = len(heat_data)
-                radius_factor = min(max(8, 20 - int(data_density / 100)), 20)
+            # Case 2: Check for data points format
+            elif grid_data and 'data' in grid_data and isinstance(grid_data['data'], list):
+                points = grid_data['data']
                 
-                HeatMap(
-                    heat_data,
-                    radius=radius_factor,
-                    gradient=gradient_dict,
-                    min_opacity=0.6,
-                    blur=radius_factor * 0.8
-                ).add_to(m)
+                if len(points) == 0:
+                    logger.warning("No data points available for map visualization")
+                    return m
+                
+                # Extract min/max values for color scaling
+                values = [p.get('value', 0) for p in points if 'value' in p]
+                if not values:
+                    logger.warning("No valid values in data points")
+                    return m
+                    
+                min_val = grid_data.get('min_value', min(values))
+                max_val = grid_data.get('max_value', max(values))
+                
+                # Determine color scale based on parameter
+                if 'temperature' in parameter.lower():
+                    colormap = linear.RdBu_11.scale(min_val, max_val)
+                    colormap_name = 'Temperature (°C)'
+                elif 'precipitation' in parameter.lower():
+                    colormap = linear.Blues_09.scale(0, max(max_val, 0.1))
+                    colormap_name = 'Precipitation (mm)'
+                elif 'wind' in parameter.lower():
+                    colormap = linear.YlOrRd_09.scale(0, max(max_val, 1))
+                    colormap_name = 'Wind Speed (km/h)'
+                else:
+                    colormap = linear.viridis.scale(min_val, max_val)
+                    colormap_name = parameter
+                
+                # Add the color map to the main map
+                colormap.caption = colormap_name
+                colormap.add_to(m)
+                
+                # Prepare data for heatmap
+                heat_data = []
+                for point in points:
+                    if 'lat' in point and 'lon' in point and 'value' in point:
+                        try:
+                            # Normalize value between 0 and 1 for heatmap intensity
+                            if max_val > min_val:
+                                normalized = (point['value'] - min_val) / (max_val - min_val)
+                            else:
+                                normalized = 0.5
+                                
+                            normalized = max(0, min(1, normalized))  # Ensure within [0,1]
+                            heat_data.append([point['lat'], point['lon'], normalized])
+                        except (ValueError, TypeError) as e:
+                            logger.error(f"Error processing heatmap point: {e}")
+                
+                # Use appropriate color gradient
+                if 'temperature' in parameter.lower():
+                    gradient = {"0": 'blue', "0.25": 'lightblue', "0.5": 'yellow', "0.75": 'orange', "1": 'red'}
+                elif 'precipitation' in parameter.lower():
+                    gradient = {"0": 'green', "0.25": 'lightblue', "0.5": 'blue', "0.75": 'darkblue', "1": 'navy'}
+                elif 'wind' in parameter.lower():
+                    gradient = {"0": 'lightblue', "0.25": 'lightgreen', "0.5": 'yellow', "0.75": 'orange', "1": 'red'}
+                elif 'humidity' in parameter.lower() or 'cloud' in parameter.lower():
+                    gradient = {"0": 'white', "0.25": 'lightblue', "0.5": 'blue', "0.75": 'darkblue', "1": 'navy'}
+                else:
+                    gradient = {"0": 'blue', "0.25": 'cyan', "0.5": 'lime', "0.75": 'yellow', "1": 'red'}
+                
+                # Adjust radius based on data density
+                if len(heat_data) > 0:
+                    # Smaller radius for dense data, larger for sparse
+                    density = min(len(heat_data) / 100, 10)
+                    radius = max(5, 15 - density)
+                    
+                    HeatMap(
+                        heat_data,
+                        radius=radius,
+                        gradient=gradient,
+                        min_opacity=0.6,
+                        blur=radius * 0.7,
+                        max_zoom=18
+                    ).add_to(m)
             
             return m
             
@@ -291,6 +413,80 @@ class WeatherVisualizer:
                 tiles='CartoDB positron'
             )
             return m
+            
+    def _add_data_as_heatmap(self, m, lats, lons, values, min_val, max_val, parameter):
+        """Helper method to add data as heatmap layer"""
+        try:
+            heat_data = []
+            
+            # Determine appropriate color gradient
+            if 'temperature' in parameter.lower():
+                gradient_dict = {"0": 'blue', "0.25": 'lightblue', "0.5": 'yellow', "0.75": 'orange', "1": 'red'}
+            elif 'precipitation' in parameter.lower():
+                gradient_dict = {"0": 'green', "0.25": 'lightblue', "0.5": 'blue', "0.75": 'darkblue', "1": 'navy'}
+            elif 'wind' in parameter.lower():
+                gradient_dict = {"0": 'lightblue', "0.25": 'lightgreen', "0.5": 'yellow', "0.75": 'orange', "1": 'red'}
+            elif 'humidity' in parameter.lower() or 'cloud' in parameter.lower():
+                gradient_dict = {"0": 'white', "0.25": 'lightblue', "0.5": 'blue', "0.75": 'darkblue', "1": 'navy'}
+            else:
+                gradient_dict = {"0": 'blue', "0.25": 'cyan', "0.5": 'lime', "0.75": 'yellow', "1": 'red'}
+            
+            # Process data for heatmap
+            for i in range(len(lats)):
+                for j in range(len(lons)):
+                    # Ensure all values are properly converted to float
+                    try:
+                        lat_val = float(lats[i])
+                        lon_val = float(lons[j])
+                        
+                        # Handle 1D or 2D values array
+                        if isinstance(values[i], list):
+                            if j < len(values[i]) and values[i][j] is not None:
+                                data_val = float(values[i][j])
+                            else:
+                                continue  # Skip missing values
+                        else:
+                            data_val = float(values[i])
+                        
+                        # Normalize value between 0 and 1 for heatmap intensity
+                        if max_val > min_val:
+                            normalized = (data_val - min_val) / (max_val - min_val)
+                        else:
+                            normalized = 0.5
+                            
+                        normalized = max(0, min(1, normalized))  # Ensure within [0,1]
+                        heat_data.append([lat_val, lon_val, normalized])
+                        
+                    except (ValueError, TypeError, IndexError) as e:
+                        logger.error(f"Error processing heatmap data point: {e}")
+                        continue
+            
+            if len(heat_data) > 0:
+                # Adjust radius and blur based on data density
+                data_density = len(heat_data)
+                points_per_degree = data_density / ((max(lats) - min(lats)) * (max(lons) - min(lons)))
+                
+                # Smaller radius for dense data, larger for sparse
+                if points_per_degree > 100:
+                    radius_factor = 5  # Very dense
+                elif points_per_degree > 50:
+                    radius_factor = 8  # Dense
+                elif points_per_degree > 20:
+                    radius_factor = 12  # Medium
+                else:
+                    radius_factor = 15  # Sparse
+                
+                HeatMap(
+                    heat_data,
+                    radius=radius_factor,
+                    gradient=gradient_dict,
+                    min_opacity=0.6,
+                    blur=radius_factor * 0.6,
+                    max_zoom=18
+                ).add_to(m)
+                
+        except Exception as e:
+            logger.error(f"Error adding heatmap layer: {e}")
     
     def plot_precipitation_bars(self, precip_df, height=400):
         """

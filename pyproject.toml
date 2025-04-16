@@ -17,4 +17,5 @@ dependencies = [
     "trafilatura>=2.0.0",
     "sqlalchemy>=2.0.40",
     "psycopg2-binary>=2.9.10",
+    "scipy>=1.15.2",
 ]
