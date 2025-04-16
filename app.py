@@ -146,11 +146,47 @@ with st.sidebar:
     st.header("Map Settings")
     
     map_params = [
+        # Temperature parameters
         {"code": "TMP_TGL_2", "name": "Temperature (2m)"},
-        {"code": "APCP_SFC", "name": "Precipitation"},
+        {"code": "TMP_TGL_0", "name": "Surface Temperature"},
+        {"code": "TMP_ISBL_500", "name": "Temperature at 500 hPa"},
+        {"code": "TMP_ISBL_850", "name": "Temperature at 850 hPa"},
+        {"code": "TMAX_TGL_2", "name": "Max Temperature (2m)"},
+        {"code": "TMIN_TGL_2", "name": "Min Temperature (2m)"},
+        
+        # Precipitation parameters
+        {"code": "APCP_SFC", "name": "Total Precipitation"},
+        {"code": "ACPCP_SFC", "name": "Convective Precipitation"},
+        {"code": "SNOD_SFC", "name": "Snow Depth"},
+        {"code": "CRAIN_SFC", "name": "Categorical Rain"},
+        {"code": "CSNOW_SFC", "name": "Categorical Snow"},
+        
+        # Wind parameters
         {"code": "WIND_TGL_10", "name": "Wind Speed (10m)"},
+        {"code": "WDIR_TGL_10", "name": "Wind Direction (10m)"},
+        {"code": "GUST_TGL_10", "name": "Wind Gust (10m)"},
+        {"code": "WIND_ISBL_250", "name": "Wind Speed (250 hPa)"},
+        
+        # Pressure parameters
         {"code": "PRMSL_MSL", "name": "Sea Level Pressure"},
+        {"code": "PRES_SFC", "name": "Surface Pressure"},
+        {"code": "HGT_ISBL_500", "name": "500 hPa Height"},
+        
+        # Humidity parameters
         {"code": "RH_TGL_2", "name": "Relative Humidity (2m)"},
+        {"code": "RH_ISBL_700", "name": "Relative Humidity (700 hPa)"},
+        {"code": "PWAT_EATM", "name": "Precipitable Water"},
+        
+        # Cloud parameters
+        {"code": "TCDC_SFC", "name": "Total Cloud Cover"},
+        {"code": "LCDC_LOW", "name": "Low Cloud Cover"},
+        {"code": "MCDC_MID", "name": "Medium Cloud Cover"},
+        {"code": "HCDC_HIGH", "name": "High Cloud Cover"},
+        
+        # Severe weather parameters
+        {"code": "CAPE_SFC", "name": "CAPE"},
+        {"code": "CIN_SFC", "name": "CIN"},
+        {"code": "LFTX_SFC", "name": "Lifted Index"},
     ]
     
     selected_param = st.selectbox(
@@ -171,10 +207,46 @@ with st.sidebar:
     st.session_state.selected_parameter = selected_param
     st.session_state.forecast_hour_for_map = forecast_hour_for_map
     
+    # Additional parameter selection for charts
+    st.header("Chart Settings")
+    
+    # Group parameters by type
+    param_groups = {
+        "Temperature": [p for p in map_params if any(x in p["code"] for x in ["TMP", "TMAX", "TMIN"])],
+        "Precipitation": [p for p in map_params if any(x in p["code"] for x in ["PCP", "SNOW", "RAIN"])],
+        "Wind": [p for p in map_params if any(x in p["code"] for x in ["WIND", "WDIR", "GUST", "UGRD", "VGRD"])],
+        "Pressure": [p for p in map_params if any(x in p["code"] for x in ["PRMSL", "PRES", "HGT"])],
+        "Humidity": [p for p in map_params if any(x in p["code"] for x in ["RH", "SPFH", "PWAT"])],
+        "Clouds": [p for p in map_params if "CDC" in p["code"]],
+        "Severe Weather": [p for p in map_params if any(x in p["code"] for x in ["CAPE", "CIN", "LFTX"])]
+    }
+    
+    # Create a multi-select for additional parameters
+    selected_group = st.selectbox(
+        "Parameter Category",
+        options=list(param_groups.keys()),
+        index=0
+    )
+    
+    if selected_group in param_groups:
+        additional_params = st.multiselect(
+            "Additional Parameters to Chart",
+            options=[p["code"] for p in param_groups[selected_group]],
+            default=[],
+            format_func=lambda x: next((p["name"] for p in map_params if p["code"] == x), x)
+        )
+        
+        if additional_params:
+            st.session_state.additional_params = additional_params
+        elif 'additional_params' not in st.session_state:
+            st.session_state.additional_params = []
+    
     # About section
     st.header("About")
     st.markdown("""
     This application visualizes weather forecast data from the MeteoCenter Global Deterministic Prediction System (GDPS).
+    
+    The GDPS is a global numerical weather prediction system with a horizontal resolution of approximately 15 km.
     
     Data is updated twice daily with forecasts up to 168 hours ahead.
     """)
@@ -213,6 +285,17 @@ with st.spinner("Fetching weather data..."):
             st.session_state.forecast_hours
         )
     }
+    
+    # Fetch additional parameters if any are selected
+    if 'additional_params' in st.session_state and st.session_state.additional_params:
+        for param in st.session_state.additional_params:
+            if param not in data:  # Only fetch if not already in data
+                data[param] = fetch_and_process_data(
+                    st.session_state.location["lat"],
+                    st.session_state.location["lon"],
+                    param,
+                    st.session_state.forecast_hours
+                )
     
     # Fetch warnings
     warnings_data = fetch_weather_warnings(
@@ -349,14 +432,69 @@ with col2:
             logger.error(f"Error calculating feels-like temperature: {e}")
     
     # Weather parameters description
-    st.markdown("### Weather Parameters")
-    st.markdown("""
-    - **Temperature**: Air temperature at 2 meters above ground
-    - **Precipitation**: Accumulated precipitation (rain, snow, etc.)
-    - **Wind**: Wind speed at 10 meters above ground
-    - **Humidity**: Relative humidity at 2 meters above ground
-    - **Pressure**: Sea-level atmospheric pressure
-    """)
+    st.markdown("### GDPS Parameters")
+    
+    with st.expander("Temperature Parameters"):
+        st.markdown("""
+        - **TMP_TGL_2**: Air temperature at 2 meters above ground
+        - **TMP_TGL_0**: Temperature at surface level
+        - **TMP_ISBL_500**: Temperature at 500 hPa pressure level (approx. 5.5 km altitude)
+        - **TMP_ISBL_850**: Temperature at 850 hPa pressure level (approx. 1.5 km altitude)
+        - **TMAX_TGL_2**: Maximum temperature at 2 meters above ground
+        - **TMIN_TGL_2**: Minimum temperature at 2 meters above ground
+        """)
+    
+    with st.expander("Precipitation Parameters"):
+        st.markdown("""
+        - **APCP_SFC**: Total precipitation accumulation
+        - **ACPCP_SFC**: Convective precipitation accumulation (thunderstorms)
+        - **SNOD_SFC**: Snow depth on ground
+        - **WEASD_SFC**: Water equivalent of accumulated snow depth
+        - **CRAIN_SFC**: Categorical rain (yes=1/no=0)
+        - **CSNOW_SFC**: Categorical snow (yes=1/no=0)
+        """)
+    
+    with st.expander("Wind Parameters"):
+        st.markdown("""
+        - **WIND_TGL_10**: Wind speed at 10 meters above ground
+        - **WDIR_TGL_10**: Wind direction at 10 meters (degrees, 0=North, 90=East)
+        - **GUST_TGL_10**: Wind gust at 10 meters above ground
+        - **UGRD_TGL_10**: U-component of wind at 10 meters (east-west)
+        - **VGRD_TGL_10**: V-component of wind at 10 meters (north-south)
+        - **WIND_ISBL_250**: Wind speed at 250 hPa (approx. 10.5 km, jet stream level)
+        """)
+    
+    with st.expander("Pressure & Height Parameters"):
+        st.markdown("""
+        - **PRMSL_MSL**: Mean sea level pressure
+        - **PRES_SFC**: Surface pressure
+        - **HGT_ISBL_500**: 500 hPa geopotential height (altitude of 500 hPa pressure level)
+        """)
+    
+    with st.expander("Humidity & Moisture Parameters"):
+        st.markdown("""
+        - **RH_TGL_2**: Relative humidity at 2 meters
+        - **RH_ISBL_700**: Relative humidity at 700 hPa level (mid-troposphere)
+        - **SPFH_TGL_2**: Specific humidity at 2 meters (mass of water vapor per unit mass of air)
+        - **PWAT_EATM**: Precipitable water (total column water vapor)
+        """)
+    
+    with st.expander("Cloud Parameters"):
+        st.markdown("""
+        - **TCDC_SFC**: Total cloud cover (percentage)
+        - **LCDC_LOW**: Low cloud cover (below 2 km)
+        - **MCDC_MID**: Medium cloud cover (2-6 km)
+        - **HCDC_HIGH**: High cloud cover (above 6 km)
+        """)
+    
+    with st.expander("Severe Weather Parameters"):
+        st.markdown("""
+        - **CAPE_SFC**: Convective Available Potential Energy (thunderstorm potential)
+        - **CIN_SFC**: Convective Inhibition (resistance to thunderstorm formation)
+        - **LFTX_SFC**: Lifted Index (atmospheric stability measure)
+        - **VIS_SFC**: Surface visibility
+        """)
+    
     
     # Data source information
     st.markdown("### Data Source")
