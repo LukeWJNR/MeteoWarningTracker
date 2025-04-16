@@ -108,8 +108,9 @@ if 'forecast_hour_for_map' not in st.session_state:
     st.session_state.forecast_hour_for_map = 24
 
 # Title and introduction
-st.title("Weather Forecast")
-st.markdown("### MeteoCenter GDPS Data Visualization")
+st.title("GDPS 15km Weather Forecast")
+st.markdown("### Global Deterministic Prediction System - Comprehensive Weather Data")
+st.markdown("This application provides detailed forecast visualizations from the Global Deterministic Prediction System (GDPS) 15km model, with access to over 30 meteorological parameters at various atmospheric levels.")
 
 # Sidebar for location search and configuration
 with st.sidebar:
@@ -244,11 +245,13 @@ with st.sidebar:
     # About section
     st.header("About")
     st.markdown("""
-    This application visualizes weather forecast data from the MeteoCenter Global Deterministic Prediction System (GDPS).
+    This application provides comprehensive access to all parameters from the Global Deterministic Prediction System (GDPS 15km):
     
-    The GDPS is a global numerical weather prediction system with a horizontal resolution of approximately 15 km.
-    
-    Data is updated twice daily with forecasts up to 168 hours ahead.
+    - 30+ meteorological parameters at multiple atmospheric levels
+    - Global coverage with 15km horizontal resolution
+    - Supports forecasts up to 168 hours (7 days) ahead
+    - Detailed visualizations of temperature, precipitation, wind, pressure, and more
+    - Severe weather warning detection
     """)
 
 # Main content
@@ -369,6 +372,9 @@ with col1:
     # Display map
     folium_static(weather_map, width=800)
     
+    # Add note about sample data
+    st.info("Note: This application is showing sample forecast data in demo mode.")
+    
     # Temperature chart
     if data["TMP_TGL_2"] is not None:
         temp_fig = visualizer.plot_time_series(
@@ -393,6 +399,46 @@ with col1:
             "km/h"
         )
         st.plotly_chart(wind_fig, use_container_width=True)
+        
+    # Display additional parameter charts if any are selected
+    if 'additional_params' in st.session_state and st.session_state.additional_params:
+        st.markdown("### Additional Parameter Charts")
+        
+        for param in st.session_state.additional_params:
+            if param in data and data[param] is not None:
+                # Get parameter info for proper labeling
+                param_info = next((p for p in map_params if p["code"] == param), None)
+                if param_info:
+                    param_name = param_info["name"]
+                    
+                    # Determine appropriate unit based on parameter type
+                    unit = ""
+                    if "TMP" in param or "TMAX" in param or "TMIN" in param:
+                        unit = "°C"
+                    elif "PCP" in param or "SNOW" in param or "WEASD" in param:
+                        unit = "mm"
+                    elif "WIND" in param or "GUST" in param:
+                        unit = "km/h"
+                    elif "PRMSL" in param or "PRES" in param:
+                        unit = "hPa"
+                    elif "RH" in param or "CDC" in param:
+                        unit = "%"
+                    elif "HGT" in param:
+                        unit = "m"
+                    elif "CAPE" in param or "CIN" in param:
+                        unit = "J/kg"
+                    
+                    # Check if parameter requires special chart type
+                    if "APCP" in param or "PCP" in param:
+                        fig = visualizer.plot_precipitation_bars(data[param])
+                    elif "WDIR" in param:
+                        # For direction parameters, use specific visualization if implemented
+                        # For now, fallback to regular chart
+                        fig = visualizer.plot_time_series(data[param], param_name, unit)
+                    else:
+                        fig = visualizer.plot_time_series(data[param], param_name, unit)
+                    
+                    st.plotly_chart(fig, use_container_width=True)
 
 # Column 2: Forecast summary
 with col2:
@@ -498,15 +544,52 @@ with col2:
     
     # Data source information
     st.markdown("### Data Source")
-    st.markdown("""
-    Weather forecast data is provided by MeteoCenter Global Deterministic Prediction System (GDPS).
     
-    The GDPS model is run twice daily at 00Z and 12Z, providing forecast data up to 168 hours ahead.
-    """)
+    data_source_tab1, data_source_tab2 = st.tabs(["GDPS Information", "Alternative Sources"])
+    
+    with data_source_tab1:
+        st.markdown("""
+        ### Global Deterministic Prediction System (GDPS)
+        
+        The GDPS is Environment Canada's operational global numerical weather prediction system with a horizontal resolution of approximately 15 km.
+        
+        **Key Features:**
+        - Global coverage with 15 km horizontal resolution
+        - Runs four times daily at 00Z, 06Z, 12Z, and 18Z
+        - Provides forecasts up to 240 hours (10 days) ahead
+        - Includes over 30 meteorological parameters at multiple atmospheric levels
+        
+        **Parameter Naming Convention:**
+        - TGL: Values at a specific height above ground level (e.g., TGL_2 = 2 meters)
+        - ISBL: Values at a specific pressure level (e.g., ISBL_500 = 500 hPa)
+        - SFC: Surface values
+        """)
+        
+    with data_source_tab2:
+        st.markdown("""
+        ### Alternative Weather Data Sources
+        
+        For operational use, consider these alternative data sources:
+        
+        1. **Environment Canada MSC GeoMet API**
+           - Official API for Environment Canada data
+           - Includes GDPS, RDPS, HRDPS, and other models
+           - Website: [MSC GeoMet](https://eccc-msc.github.io/open-data/msc-geomet/readme_en/)
+        
+        2. **NOAA Global Forecast System (GFS)**
+           - Global model with 0.25° resolution
+           - Free and open access
+           - Website: [NOAA GFS](https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast)
+        
+        3. **European Centre for Medium-Range Weather Forecasts (ECMWF)**
+           - High precision global forecasts
+           - Some data available freely, premium data requires subscription
+           - Website: [ECMWF](https://www.ecmwf.int/en/forecasts)
+        """)
     
     # Last updated information
     st.markdown(f"*Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
 
 # Footer
 st.markdown("---")
-st.markdown("Weather Forecast Application | Using MeteoCenter GDPS Data")
+st.markdown("GDPS 15km Weather Forecast Application | Environment Canada Global Deterministic Prediction System")
