@@ -12,7 +12,12 @@ from utils.data_fetcher import MeteoDataFetcher
 from utils.data_processor import WeatherDataProcessor
 from utils.visualizations import WeatherVisualizer
 from utils.database import db
+from utils.lightning_wizard import lightning_wizard
 import json
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 import requests
 import logging
 
@@ -412,7 +417,7 @@ with st.spinner("Fetching weather data..."):
 if severe_events or warnings_data:
     st.markdown("## ⚠️ Severe Weather Alerts")
     
-    warning_tabs = st.tabs(["Forecast Warnings", "Official Alerts"])
+    warning_tabs = st.tabs(["Forecast Warnings", "Official Alerts", "Lightning Wizard Maps"])
     
     with warning_tabs[0]:
         if severe_events:
@@ -438,6 +443,40 @@ if severe_events or warnings_data:
                 )
         else:
             st.info("No official weather alerts in effect for this location.")
+    
+    with warning_tabs[2]:
+        st.markdown("### ⚡ Lightning Wizard Severe Weather Maps")
+        st.markdown("These maps provide the latest severe weather forecasts from Lightning Wizard.")
+        
+        # Create subtabs for different map types
+        lw_map_tabs = st.tabs(["Severe Weather", "Lightning", "Radar", "Satellite"])
+        
+        # Region selector (US or North America)
+        region = st.radio("Select Region", ["US", "North America"], horizontal=True)
+        region_code = "US" if region == "US" else "NA"
+        
+        with lw_map_tabs[0]:
+            # Display severe weather map
+            st.markdown("#### Severe Weather Forecast")
+            lightning_wizard.display_map_in_streamlit("severe_weather", region=region_code)
+            
+        with lw_map_tabs[1]:
+            # Display lightning map
+            st.markdown("#### Lightning Forecast")
+            lightning_wizard.display_map_in_streamlit("lightning", region=region_code)
+            
+        with lw_map_tabs[2]:
+            # Display radar map
+            st.markdown("#### Radar Map")
+            lightning_wizard.display_map_in_streamlit("radar", region=region_code)
+            
+        with lw_map_tabs[3]:
+            # Display satellite map
+            st.markdown("#### Satellite Imagery")
+            lightning_wizard.display_map_in_streamlit("satellite", region=region_code)
+        
+        st.markdown("---")
+        st.caption("Maps provided by [Lightning Wizard](https://www.lightningwizard.com/maps). Updated regularly.")
 
 # Create layout for main content
 col1, col2 = st.columns([3, 1])
@@ -456,6 +495,34 @@ with col1:
         next((p['name'] for p in map_params if p['code'] == st.session_state.selected_parameter), st.session_state.selected_parameter),
         zoom=8
     )
+    
+    # Option to add Lightning Wizard overlays
+    with st.expander("Add Lightning Wizard Map Overlays"):
+        col1, col2 = st.columns(2)
+        with col1:
+            overlay_types = st.multiselect(
+                "Select Map Overlays",
+                ["Lightning", "Radar", "Severe Weather", "Satellite"],
+                default=[]
+            )
+        with col2:
+            overlay_region = st.radio(
+                "Select Overlay Region",
+                ["US", "North America"],
+                horizontal=True
+            )
+            overlay_opacity = st.slider("Overlay Opacity", 0.1, 1.0, 0.7, 0.1)
+        
+        # Apply selected overlays
+        if overlay_types:
+            for overlay_type in overlay_types:
+                overlay_type_key = overlay_type.lower().replace(" ", "_")
+                weather_map = lightning_wizard.create_folium_overlay(
+                    overlay_type_key, 
+                    weather_map, 
+                    region="US" if overlay_region == "US" else "NA",
+                    opacity=overlay_opacity
+                )
     
     # Display map
     folium_static(weather_map, width=800)

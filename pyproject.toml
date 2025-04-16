@@ -18,4 +18,6 @@ dependencies = [
     "sqlalchemy>=2.0.40",
     "psycopg2-binary>=2.9.10",
     "scipy>=1.15.2",
+    "beautifulsoup4>=4.13.4",
+    "pillow>=11.2.1",
 ]

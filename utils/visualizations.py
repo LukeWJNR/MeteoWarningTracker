@@ -301,9 +301,13 @@ class WeatherVisualizer:
                             plt.savefig(buf, format='png', dpi=100, bbox_inches='tight', pad_inches=0)
                             buf.seek(0)
                             
-                            # Add image overlay to map
+                            # Convert the buffer to base64 to avoid JSON serialization issue
+                            import base64
+                            image_data = base64.b64encode(buf.getvalue()).decode("utf-8")
+                            
+                            # Add image overlay to map using encoded data
                             ImageOverlay(
-                                buf,
+                                f"data:image/png;base64,{image_data}",
                                 bounds=bounds,
                                 opacity=0.7,
                                 cross_origin=False,
