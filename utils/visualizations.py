@@ -7,6 +7,10 @@ from folium.plugins import HeatMap, MarkerCluster
 from branca.colormap import linear
 import streamlit as st
 import matplotlib.pyplot as plt
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 class WeatherVisualizer:
     """
@@ -244,12 +248,23 @@ class WeatherVisualizer:
                 heat_data = []
                 for i in range(len(lats)):
                     for j in range(len(lons)):
-                        heat_data.append([lats[i], lons[j], values[i][j]])
+                        # Ensure all values are properly converted to float
+                        try:
+                            lat_val = float(lats[i])
+                            lon_val = float(lons[j])
+                            data_val = float(values[i][j])
+                            heat_data.append([lat_val, lon_val, data_val])
+                        except (ValueError, TypeError, IndexError) as e:
+                            logger.error(f"Error processing heatmap data point: {e}")
+                            continue
+                
+                # Use a string-based gradient to avoid key errors
+                gradient_dict = {"0": 'blue', "0.5": 'lime', "1": 'red'}
                 
                 HeatMap(
                     heat_data,
                     radius=15,
-                    gradient={0.0: 'blue', 0.5: 'lime', 1.0: 'red'},
+                    gradient=gradient_dict,
                     min_opacity=0.5,
                     blur=10
                 ).add_to(m)

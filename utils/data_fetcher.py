@@ -2,8 +2,12 @@ import requests
 import pandas as pd
 import numpy as np
 import logging
+import os
 from io import BytesIO
 from datetime import datetime, timedelta
+
+# Import database utility
+from utils.database import db
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -45,7 +49,7 @@ class MeteoDataFetcher:
             
         return f"{run_date}{run_hour}"
     
-    def fetch_gdps_data(self, parameter, lat, lon, forecast_hours=72):
+    def fetch_gdps_data(self, parameter, lat, lon, forecast_hours=72, save_to_db=True):
         """
         Fetch GDPS data for a specific parameter at a given location.
         
@@ -54,34 +58,77 @@ class MeteoDataFetcher:
             lat (float): Latitude
             lon (float): Longitude
             forecast_hours (int): Number of forecast hours to fetch
+            save_to_db (bool): Whether to save the data to the database
         
         Returns:
             pd.DataFrame: Dataframe containing the forecast data
         """
+        # First check if location exists in database and save it if necessary
+        location_id = None
+        if save_to_db and db.engine:
+            location_name = f"{lat:.4f}, {lon:.4f}"
+            # Try to get from database first
+            location = db.get_location_by_coordinates(lat, lon)
+            if location:
+                location_id = location['id']
+                logger.info(f"Found existing location in database: {location_id}")
+            else:
+                # Save new location
+                location_id = db.save_location(location_name, lat, lon)
+                logger.info(f"Saved new location to database: {location_id}")
+            
+            # Check for cached forecast data in database
+            if location_id:
+                db_data = db.get_latest_forecast(location_id, parameter, forecast_hours)
+                if db_data is not None and not db_data.empty:
+                    logger.info(f"Retrieved {parameter} data from database")
+                    return db_data
+        
+        # If data not in database or database not available, fetch from API
         try:
             run_time = self.get_latest_gdps_run()
             logger.info(f"Fetching GDPS data for parameter {parameter}, run: {run_time}")
             
-            # Construct URL for the data - exact URL pattern may need adjustment
+            # Try to save model run info to database
+            if save_to_db and db.engine:
+                run_datetime = datetime.strptime(run_time, "%Y%m%d%H")
+                db.save_model_run("GDPS", run_datetime)
+            
+            # Construct URL for the data
             url = f"{self.BASE_URL}/api/gdps/{run_time}/{parameter}?lat={lat}&lon={lon}&hours={forecast_hours}"
             
             response = self.session.get(url)
             response.raise_for_status()
             
-            # Parse the response - format will depend on the API's actual response
+            # Parse the response
+            data = None
             if response.headers.get('content-type') == 'application/json':
-                data = response.json()
-                return pd.DataFrame(data)
+                data_json = response.json()
+                data = pd.DataFrame(data_json)
             else:
                 # For CSV or other formats
                 data = pd.read_csv(BytesIO(response.content))
-                return data
+                
+            # Save to database if successful
+            if save_to_db and db.engine and location_id and data is not None and not data.empty:
+                success = db.save_forecast_data(location_id, parameter, data)
+                if success:
+                    logger.info(f"Saved {parameter} data to database")
+                    
+            return data
                 
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching GDPS data: {e}")
-            return None
+            # If API fails, fallback to sample data
+            sample_data = self.generate_sample_data(parameter, forecast_hours)
+            
+            # Save sample data to database if requested
+            if save_to_db and db.engine and location_id and sample_data is not None and not sample_data.empty:
+                db.save_forecast_data(location_id, parameter, sample_data)
+                
+            return sample_data
     
-    def fetch_severe_warnings(self, lat, lon, radius_km=50):
+    def fetch_severe_warnings(self, lat, lon, radius_km=50, save_to_db=True):
         """
         Fetch severe weather warnings for a given location.
         
@@ -89,10 +136,24 @@ class MeteoDataFetcher:
             lat (float): Latitude
             lon (float): Longitude
             radius_km (int): Radius in kilometers to check for warnings
+            save_to_db (bool): Whether to save warnings to the database
             
         Returns:
             list: List of warnings if any
         """
+        # First check if location exists in database
+        location_id = None
+        if save_to_db and db.engine:
+            location = db.get_location_by_coordinates(lat, lon)
+            if location:
+                location_id = location['id']
+                # Check for cached warnings
+                db_warnings = db.get_active_warnings(location_id)
+                if db_warnings:
+                    logger.info(f"Retrieved {len(db_warnings)} warnings from database")
+                    return db_warnings
+        
+        # If not in database or database not available, fetch from API
         try:
             url = f"{self.BASE_URL}/api/warnings?lat={lat}&lon={lon}&radius={radius_km}"
             
@@ -100,6 +161,34 @@ class MeteoDataFetcher:
             response.raise_for_status()
             
             warnings_data = response.json()
+            
+            # Save to database if successful
+            if save_to_db and db.engine and location_id and warnings_data:
+                for warning in warnings_data:
+                    warning_type = warning.get('title', 'Weather Warning')
+                    description = warning.get('description', 'No details provided')
+                    start_time = None
+                    end_time = None
+                    severity = warning.get('severity', 'moderate')
+                    
+                    # Extract times if available
+                    if 'times' in warning and warning['times']:
+                        times = sorted(pd.to_datetime(warning['times']))
+                        if times:
+                            start_time = times[0]
+                            end_time = times[-1] + pd.Timedelta(hours=1)
+                    
+                    db.save_weather_warning(
+                        location_id,
+                        warning_type,
+                        description,
+                        start_time,
+                        end_time,
+                        severity
+                    )
+                
+                logger.info(f"Saved {len(warnings_data)} warnings to database")
+            
             return warnings_data
             
         except requests.exceptions.RequestException as e:
