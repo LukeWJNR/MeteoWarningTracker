@@ -258,15 +258,26 @@ class WeatherVisualizer:
                             logger.error(f"Error processing heatmap data point: {e}")
                             continue
                 
-                # Use a string-based gradient to avoid key errors
-                gradient_dict = {"0": 'blue', "0.5": 'lime', "1": 'red'}
+                # Use more natural color gradient depending on parameter type
+                if 'temperature' in parameter.lower():
+                    gradient_dict = {"0": 'blue', "0.25": 'lightblue', "0.5": 'yellow', "0.75": 'orange', "1": 'red'}
+                elif 'precipitation' in parameter.lower():
+                    gradient_dict = {"0": 'green', "0.33": 'lightblue', "0.66": 'blue', "1": 'darkblue'}
+                elif 'wind' in parameter.lower():
+                    gradient_dict = {"0": 'lightblue', "0.33": 'lightgreen', "0.66": 'yellow', "1": 'red'}
+                else:
+                    gradient_dict = {"0": 'blue', "0.25": 'cyan', "0.5": 'lime', "0.75": 'yellow', "1": 'red'}
+                
+                # Adjust radius and blur based on data density
+                data_density = len(heat_data)
+                radius_factor = min(max(8, 20 - int(data_density / 100)), 20)
                 
                 HeatMap(
                     heat_data,
-                    radius=15,
+                    radius=radius_factor,
                     gradient=gradient_dict,
-                    min_opacity=0.5,
-                    blur=10
+                    min_opacity=0.6,
+                    blur=radius_factor * 0.8
                 ).add_to(m)
             
             return m

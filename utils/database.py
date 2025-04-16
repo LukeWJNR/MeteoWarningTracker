@@ -243,7 +243,7 @@ class WeatherDatabase:
                 WHERE location_id = :location_id
                 AND parameter_code = :parameter_code
                 AND forecast_time >= NOW()
-                AND forecast_time <= NOW() + (INTERVAL '1 hour' * :hours_limit)
+                AND forecast_time <= NOW() + (INTERVAL '1 hour' * :hours_limit::int)
                 ORDER BY forecast_time ASC
             """)
             
@@ -463,8 +463,8 @@ class WeatherDatabase:
                 # Delete old forecast data
                 forecast_query = text("""
                     DELETE FROM forecast_data
-                    WHERE created_at < NOW() - INTERVAL :days DAY
-                    OR forecast_time < NOW() - INTERVAL '1' DAY
+                    WHERE created_at < NOW() - (INTERVAL '1 day' * :days::int)
+                    OR forecast_time < NOW() - INTERVAL '1 day'
                 """)
                 connection.execute(forecast_query, {"days": days_to_keep})
                 
@@ -472,7 +472,7 @@ class WeatherDatabase:
                 warnings_query = text("""
                     DELETE FROM weather_warnings
                     WHERE (end_time IS NOT NULL AND end_time < NOW())
-                    OR created_at < NOW() - INTERVAL :days DAY
+                    OR created_at < NOW() - (INTERVAL '1 day' * :days::int)
                 """)
                 connection.execute(warnings_query, {"days": days_to_keep})
                 
@@ -480,7 +480,7 @@ class WeatherDatabase:
                 model_runs_query = text("""
                     DELETE FROM model_runs
                     WHERE is_latest = FALSE
-                    AND available_at < NOW() - INTERVAL :days DAY
+                    AND available_at < NOW() - (INTERVAL '1 day' * :days::int)
                 """)
                 connection.execute(model_runs_query, {"days": days_to_keep})
                 
