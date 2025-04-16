@@ -1,0 +1,51 @@
+
+Collecting usage statistics. To deactivate, set browser.gatherUsageStats to false.
+
+
+  You can now view your Streamlit app in your browser.
+
+  URL: http://0.0.0.0:5000
+
+INFO:utils.database:Database connection established
+INFO:utils.data_fetcher:Found existing location in database: 1
+INFO:utils.database:Retrieved 355 forecast points for TMP_TGL_2
+INFO:utils.data_fetcher:Retrieved TMP_TGL_2 data from database
+INFO:utils.data_fetcher:Found existing location in database: 1
+INFO:utils.database:Retrieved 284 forecast points for APCP_SFC
+INFO:utils.data_fetcher:Retrieved APCP_SFC data from database
+INFO:utils.data_fetcher:Found existing location in database: 1
+INFO:utils.database:Retrieved 213 forecast points for WIND_TGL_10
+INFO:utils.data_fetcher:Retrieved WIND_TGL_10 data from database
+INFO:utils.data_fetcher:Found existing location in database: 1
+INFO:utils.database:Retrieved 213 forecast points for RH_TGL_2
+INFO:utils.data_fetcher:Retrieved RH_TGL_2 data from database
+INFO:utils.database:Retrieved 0 active warnings for location 1
+ERROR:utils.data_fetcher:Error fetching weather warnings: 404 Client Error: Not Found for url: https://meteocentre.com/plus/api/warnings?lat=45.5017&lon=-73.5673&radius=50
+ERROR:utils.data_fetcher:Error fetching grid data: 404 Client Error: Not Found for url: https://meteocentre.com/plus/api/gdps/2025041612/TMP_TGL_2/grid?min_lat=44.5017&min_lon=-74.5673&max_lat=46.5017&max_lon=-72.5673&hour=24
+ERROR:utils.visualizations:Error creating image overlay: Object of type BytesIO is not JSON serializable
+/home/runner/workspace/app.py:461: DeprecationWarning: 
+folium_static is deprecated and will be removed in a future release, or
+simply replaced with with st_folium which always passes
+returned_objects=[] to the component.
+Please try using st_folium instead, and
+post an issue at https://github.com/randyzwitch/streamlit-folium/issues
+if you experience issues with st_folium.
+
+  folium_static(weather_map, width=800)
+/home/runner/workspace/utils/data_processor.py:221: SettingWithCopyWarning:
+
+
+A value is trying to be set on a copy of a slice from a DataFrame.
+Try using .loc[row_indexer,col_indexer] = value instead
+
+See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+
+/home/runner/workspace/utils/data_processor.py:222: SettingWithCopyWarning:
+
+
+A value is trying to be set on a copy of a slice from a DataFrame.
+Try using .loc[row_indexer,col_indexer] = value instead
+
+See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+
+ERROR:__main__:Error calculating feels-like temperature: single positional indexer is out-of-bounds
