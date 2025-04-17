@@ -119,6 +119,15 @@ st.title("GDPS 15km Weather Forecast")
 st.markdown("### Global Deterministic Prediction System - Comprehensive Weather Data")
 st.markdown("This application provides detailed forecast visualizations from the Global Deterministic Prediction System (GDPS) 15km model, with access to over 30 meteorological parameters at various atmospheric levels.")
 
+# Add link to the new animations page
+st.markdown("""
+---
+📊 **Main Dashboard**: Current view - Data-driven forecasts with interactive visualizations.
+
+🎬 **[View Forecast Animations](/forecast_animations)**: Animations of different model outputs including Lightning Wizard severe weather forecasts.
+---
+""")
+
 # Sidebar for location search and configuration
 with st.sidebar:
     st.header("Location Settings")
