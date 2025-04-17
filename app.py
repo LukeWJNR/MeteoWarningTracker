@@ -632,72 +632,7 @@ with col2:
         except Exception as e:
             logger.error(f"Error calculating feels-like temperature: {e}")
     
-    # Weather parameters description
-    st.markdown("### GDPS Parameters")
-    
-    with st.expander("Temperature Parameters"):
-        st.markdown("""
-        - **TMP_TGL_2**: Air temperature at 2 meters above ground
-        - **TMP_TGL_0**: Temperature at surface level
-        - **TMP_ISBL_500**: Temperature at 500 hPa pressure level (approx. 5.5 km altitude)
-        - **TMP_ISBL_850**: Temperature at 850 hPa pressure level (approx. 1.5 km altitude)
-        - **TMAX_TGL_2**: Maximum temperature at 2 meters above ground
-        - **TMIN_TGL_2**: Minimum temperature at 2 meters above ground
-        """)
-    
-    with st.expander("Precipitation Parameters"):
-        st.markdown("""
-        - **APCP_SFC**: Total precipitation accumulation
-        - **ACPCP_SFC**: Convective precipitation accumulation (thunderstorms)
-        - **SNOD_SFC**: Snow depth on ground
-        - **WEASD_SFC**: Water equivalent of accumulated snow depth
-        - **CRAIN_SFC**: Categorical rain (yes=1/no=0)
-        - **CSNOW_SFC**: Categorical snow (yes=1/no=0)
-        """)
-    
-    with st.expander("Wind Parameters"):
-        st.markdown("""
-        - **WIND_TGL_10**: Wind speed at 10 meters above ground
-        - **WDIR_TGL_10**: Wind direction at 10 meters (degrees, 0=North, 90=East)
-        - **GUST_TGL_10**: Wind gust at 10 meters above ground
-        - **UGRD_TGL_10**: U-component of wind at 10 meters (east-west)
-        - **VGRD_TGL_10**: V-component of wind at 10 meters (north-south)
-        - **WIND_ISBL_250**: Wind speed at 250 hPa (approx. 10.5 km, jet stream level)
-        """)
-    
-    with st.expander("Pressure & Height Parameters"):
-        st.markdown("""
-        - **PRMSL_MSL**: Mean sea level pressure
-        - **PRES_SFC**: Surface pressure
-        - **HGT_ISBL_500**: 500 hPa geopotential height (altitude of 500 hPa pressure level)
-        """)
-    
-    with st.expander("Humidity & Moisture Parameters"):
-        st.markdown("""
-        - **RH_TGL_2**: Relative humidity at 2 meters
-        - **RH_ISBL_700**: Relative humidity at 700 hPa level (mid-troposphere)
-        - **SPFH_TGL_2**: Specific humidity at 2 meters (mass of water vapor per unit mass of air)
-        - **PWAT_EATM**: Precipitable water (total column water vapor)
-        """)
-    
-    with st.expander("Cloud Parameters"):
-        st.markdown("""
-        - **TCDC_SFC**: Total cloud cover (percentage)
-        - **LCDC_LOW**: Low cloud cover (below 2 km)
-        - **MCDC_MID**: Medium cloud cover (2-6 km)
-        - **HCDC_HIGH**: High cloud cover (above 6 km)
-        """)
-    
-    with st.expander("Severe Weather Parameters"):
-        st.markdown("""
-        - **CAPE_SFC**: Convective Available Potential Energy (thunderstorm potential)
-        - **CIN_SFC**: Convective Inhibition (resistance to thunderstorm formation)
-        - **LFTX_SFC**: Lifted Index (atmospheric stability measure)
-        - **VIS_SFC**: Surface visibility
-        """)
-    
-    
-    # Data source information
+    # Data source tabs
     st.markdown("### Data Source")
     
     data_source_tab1, data_source_tab2 = st.tabs(["GDPS Information", "Alternative Sources"])
@@ -744,6 +679,76 @@ with col2:
     
     # Last updated information
     st.markdown(f"*Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
+
+# Parameter reference section (moved outside the columns to avoid nesting issues)
+st.markdown("---")
+st.markdown("## GDPS Parameter Reference")
+st.markdown("Hover over each section to see detailed parameter descriptions.")
+
+param_col1, param_col2 = st.columns(2)
+
+with param_col1:
+    with st.expander("Temperature Parameters"):
+        st.markdown("""
+        - **TMP_TGL_2**: Air temperature at 2 meters above ground
+        - **TMP_TGL_0**: Temperature at surface level
+        - **TMP_ISBL_500**: Temperature at 500 hPa pressure level (approx. 5.5 km altitude)
+        - **TMP_ISBL_850**: Temperature at 850 hPa pressure level (approx. 1.5 km altitude)
+        - **TMAX_TGL_2**: Maximum temperature at 2 meters above ground
+        - **TMIN_TGL_2**: Minimum temperature at 2 meters above ground
+        """)
+    
+    with st.expander("Precipitation Parameters"):
+        st.markdown("""
+        - **APCP_SFC**: Total precipitation accumulation
+        - **ACPCP_SFC**: Convective precipitation accumulation (thunderstorms)
+        - **SNOD_SFC**: Snow depth on ground
+        - **WEASD_SFC**: Water equivalent of accumulated snow depth
+        - **CRAIN_SFC**: Categorical rain (yes=1/no=0)
+        - **CSNOW_SFC**: Categorical snow (yes=1/no=0)
+        """)
+    
+    with st.expander("Wind Parameters"):
+        st.markdown("""
+        - **WIND_TGL_10**: Wind speed at 10 meters above ground
+        - **WDIR_TGL_10**: Wind direction at 10 meters (degrees, 0=North, 90=East)
+        - **GUST_TGL_10**: Wind gust at 10 meters above ground
+        - **UGRD_TGL_10**: U-component of wind at 10 meters (east-west)
+        - **VGRD_TGL_10**: V-component of wind at 10 meters (north-south)
+        - **WIND_ISBL_250**: Wind speed at 250 hPa (approx. 10.5 km, jet stream level)
+        """)
+
+with param_col2:
+    with st.expander("Pressure & Height Parameters"):
+        st.markdown("""
+        - **PRMSL_MSL**: Mean sea level pressure
+        - **PRES_SFC**: Surface pressure
+        - **HGT_ISBL_500**: 500 hPa geopotential height (altitude of 500 hPa pressure level)
+        """)
+    
+    with st.expander("Humidity & Moisture Parameters"):
+        st.markdown("""
+        - **RH_TGL_2**: Relative humidity at 2 meters
+        - **RH_ISBL_700**: Relative humidity at 700 hPa level (mid-troposphere)
+        - **SPFH_TGL_2**: Specific humidity at 2 meters (mass of water vapor per unit mass of air)
+        - **PWAT_EATM**: Precipitable water (total column water vapor)
+        """)
+    
+    with st.expander("Cloud Parameters"):
+        st.markdown("""
+        - **TCDC_SFC**: Total cloud cover (percentage)
+        - **LCDC_LOW**: Low cloud cover (below 2 km)
+        - **MCDC_MID**: Medium cloud cover (2-6 km)
+        - **HCDC_HIGH**: High cloud cover (above 6 km)
+        """)
+    
+    with st.expander("Severe Weather Parameters"):
+        st.markdown("""
+        - **CAPE_SFC**: Convective Available Potential Energy (thunderstorm potential)
+        - **CIN_SFC**: Convective Inhibition (resistance to thunderstorm formation)
+        - **LFTX_SFC**: Lifted Index (atmospheric stability measure)
+        - **VIS_SFC**: Surface visibility
+        """)
 
 # Footer
 st.markdown("---")
