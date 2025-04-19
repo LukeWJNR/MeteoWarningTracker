@@ -165,7 +165,96 @@ def generate_meteocenter_url(model: str, date: str, parameter: str, hour: str = 
         str: URL to the forecast image
     """
     try:
-        return f"https://meteocentre.com/plus/{model.lower()}/{date}/{parameter}/{hour}.png"
+        # Standard path format
+        url = f"https://meteocentre.com/plus/{model.lower()}/{date}/{parameter}/{hour}.png"
+        
+        # Alternative paths to try based on common patterns
+        alternative_urls = []
+        
+        # Try alternative dates (yesterday and tomorrow)
+        from datetime import datetime, timedelta
+        
+        # Convert string date to datetime for manipulation
+        try:
+            date_obj = datetime.strptime(date, "%Y%m%d")
+            yesterday = (date_obj - timedelta(days=1)).strftime("%Y%m%d")
+            tomorrow = (date_obj + timedelta(days=1)).strftime("%Y%m%d")
+            
+            # Add alternative dates
+            alternative_urls.extend([
+                f"https://meteocentre.com/plus/{model.lower()}/{yesterday}/{parameter}/{hour}.png",
+                f"https://meteocentre.com/plus/{model.lower()}/{tomorrow}/{parameter}/{hour}.png"
+            ])
+        except ValueError:
+            pass  # Invalid date format, skip alternatives
+        
+        # Try alternative parameter formats
+        if parameter.isupper():
+            alternative_urls.append(f"https://meteocentre.com/plus/{model.lower()}/{date}/{parameter.lower()}/{hour}.png")
+        else:
+            alternative_urls.append(f"https://meteocentre.com/plus/{model.lower()}/{date}/{parameter.upper()}/{hour}.png")
+        
+        # Try alternative model run hours
+        for alt_hour in ["00Z", "06Z", "12Z", "18Z"]:
+            if alt_hour != hour:
+                alternative_urls.append(f"https://meteocentre.com/plus/{model.lower()}/{date}/{parameter}/{alt_hour}.png")
+        
+        # Return a list containing the primary URL and alternatives
+        return url
     except Exception as e:
         logger.error(f"Error generating MeteoCenter URL: {e}")
         return ""
+
+def get_meteocenter_alternative_urls(model: str, date: str, parameter: str) -> list:
+    """
+    Generate a list of alternative URLs for MeteoCenter forecast images.
+    This is useful when the primary URL fails to load.
+    
+    Args:
+        model (str): Model name (e.g., "GDPS", "GFS")
+        date (str): Date in format YYYYMMDD
+        parameter (str): Parameter code (e.g., "CAPE", "T850")
+        
+    Returns:
+        list: List of alternative URLs to try
+    """
+    try:
+        alternative_urls = []
+        
+        # Convert string date to datetime for manipulation
+        from datetime import datetime, timedelta
+        
+        try:
+            date_obj = datetime.strptime(date, "%Y%m%d")
+            yesterday = (date_obj - timedelta(days=1)).strftime("%Y%m%d")
+            tomorrow = (date_obj + timedelta(days=1)).strftime("%Y%m%d")
+            
+            # Add all possible combinations of dates, hours, and parameter cases
+            hours = ["00Z", "06Z", "12Z", "18Z"]
+            dates = [yesterday, date, tomorrow]
+            
+            param_variants = [parameter]
+            if parameter.isupper():
+                param_variants.append(parameter.lower())
+            else:
+                param_variants.append(parameter.upper())
+                
+            # Generate all combinations
+            for d in dates:
+                for h in hours:
+                    for p in param_variants:
+                        url = f"https://meteocentre.com/plus/{model.lower()}/{d}/{p}/{h}.png"
+                        alternative_urls.append(url)
+        except ValueError:
+            # If date parsing fails, just try the basic alternatives
+            for hour in ["00Z", "06Z", "12Z", "18Z"]:
+                alternative_urls.append(f"https://meteocentre.com/plus/{model.lower()}/{date}/{parameter}/{hour}.png")
+        
+        # Add alternate domains/paths
+        base_url = f"https://meteocentre.com/plus/{model.lower()}/latest/{parameter}.png"
+        alternative_urls.append(base_url)
+        
+        return alternative_urls
+    except Exception as e:
+        logger.error(f"Error generating alternative MeteoCenter URLs: {e}")
+        return []

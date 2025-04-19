@@ -182,16 +182,33 @@ class ForecastAnimation:
                 
                 # For MeteoCenter, we need to handle the display of forecast hours differently
                 # They typically show forecast hour as part of the filename or on the image itself
-                url = generate_meteocenter_url(model, today, parameter, "12Z")
+                primary_url = generate_meteocenter_url(model, today, parameter, "12Z")
                 
-                # If specific hour formats are available, use them
-                if url:
-                    img_data = self._download_image(url)
-                    if img_data:
-                        frames.append({
-                            "data": img_data,
-                            "hour": hour
-                        })
+                # If primary URL is available, try it first
+                img_data = None
+                if primary_url:
+                    img_data = self._download_image(primary_url)
+                
+                # If primary URL fails, try alternatives
+                if not img_data:
+                    # Get alternative URLs to try
+                    from .web_scraper import get_meteocenter_alternative_urls
+                    alternative_urls = get_meteocenter_alternative_urls(model, today, parameter)
+                    
+                    # Try each alternative URL
+                    for alt_url in alternative_urls[:3]:  # Limit to first 3 alternatives to avoid too many requests
+                        if alt_url != primary_url:  # Don't retry the primary URL
+                            img_data = self._download_image(alt_url)
+                            if img_data:
+                                logger.info(f"Successfully downloaded alternative URL: {alt_url}")
+                                break
+                
+                # If we got an image, add it to frames
+                if img_data:
+                    frames.append({
+                        "data": img_data,
+                        "hour": hour
+                    })
             
             progress_bar.empty()
             
