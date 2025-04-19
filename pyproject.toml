@@ -25,4 +25,5 @@ dependencies = [
     "metpy>=1.6.3",
     "shapely>=2.1.0",
     "sharppy>=1.4.0a3",
+    "joblib>=1.4.2",
 ]
