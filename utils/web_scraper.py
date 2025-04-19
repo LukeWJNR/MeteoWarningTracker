@@ -151,7 +151,7 @@ def get_available_animation_pages(base_url: str = "https://www.lightningwizard.c
         logger.error(f"Error getting available animation pages: {e}")
         return []
 
-def generate_meteocenter_url(model: str, date: str, parameter: str, hour: str = "12Z") -> str:
+def generate_meteocenter_url(model: str, date: str, parameter: str, hour: str = "12Z", region: str = None) -> str:
     """
     Generate a URL for a MeteoCenter forecast image.
     
@@ -160,13 +160,36 @@ def generate_meteocenter_url(model: str, date: str, parameter: str, hour: str = 
         date (str): Date in format YYYYMMDD
         parameter (str): Parameter code (e.g., "CAPE", "T850")
         hour (str): Model run hour (e.g., "00Z", "12Z")
+        region (str, optional): Region code (e.g., "na" for North America, 
+                               "us" for United States, "eu" for Europe)
         
     Returns:
         str: URL to the forecast image
     """
     try:
-        # Standard path format
-        url = f"https://meteocentre.com/plus/{model.lower()}/{date}/{parameter}/{hour}.png"
+        # Define region-specific path component if provided
+        region_path = ""
+        if region:
+            region = region.lower()
+            # Map region codes to URL path components
+            region_map = {
+                "na": "north_america",
+                "us": "usa",
+                "eu": "europe",
+                "global": "global",
+                "atl": "atlantic",
+                "pac": "pacific",
+                "asia": "asia",
+                "aus": "australia",
+                "sa": "south_america",
+                "af": "africa"
+            }
+            # Get the region path if it's in our map
+            if region in region_map:
+                region_path = f"/{region_map[region]}"
+        
+        # Standard path format with optional region component
+        url = f"https://meteocentre.com/plus/{model.lower()}{region_path}/{date}/{parameter}/{hour}.png"
         
         # Alternative paths to try based on common patterns
         alternative_urls = []
@@ -180,32 +203,32 @@ def generate_meteocenter_url(model: str, date: str, parameter: str, hour: str = 
             yesterday = (date_obj - timedelta(days=1)).strftime("%Y%m%d")
             tomorrow = (date_obj + timedelta(days=1)).strftime("%Y%m%d")
             
-            # Add alternative dates
+            # Add alternative dates with the region path if specified
             alternative_urls.extend([
-                f"https://meteocentre.com/plus/{model.lower()}/{yesterday}/{parameter}/{hour}.png",
-                f"https://meteocentre.com/plus/{model.lower()}/{tomorrow}/{parameter}/{hour}.png"
+                f"https://meteocentre.com/plus/{model.lower()}{region_path}/{yesterday}/{parameter}/{hour}.png",
+                f"https://meteocentre.com/plus/{model.lower()}{region_path}/{tomorrow}/{parameter}/{hour}.png"
             ])
         except ValueError:
             pass  # Invalid date format, skip alternatives
         
         # Try alternative parameter formats
         if parameter.isupper():
-            alternative_urls.append(f"https://meteocentre.com/plus/{model.lower()}/{date}/{parameter.lower()}/{hour}.png")
+            alternative_urls.append(f"https://meteocentre.com/plus/{model.lower()}{region_path}/{date}/{parameter.lower()}/{hour}.png")
         else:
-            alternative_urls.append(f"https://meteocentre.com/plus/{model.lower()}/{date}/{parameter.upper()}/{hour}.png")
+            alternative_urls.append(f"https://meteocentre.com/plus/{model.lower()}{region_path}/{date}/{parameter.upper()}/{hour}.png")
         
         # Try alternative model run hours
         for alt_hour in ["00Z", "06Z", "12Z", "18Z"]:
             if alt_hour != hour:
-                alternative_urls.append(f"https://meteocentre.com/plus/{model.lower()}/{date}/{parameter}/{alt_hour}.png")
+                alternative_urls.append(f"https://meteocentre.com/plus/{model.lower()}{region_path}/{date}/{parameter}/{alt_hour}.png")
         
-        # Return a list containing the primary URL and alternatives
+        # Return the primary URL
         return url
     except Exception as e:
         logger.error(f"Error generating MeteoCenter URL: {e}")
         return ""
 
-def get_meteocenter_alternative_urls(model: str, date: str, parameter: str) -> list:
+def get_meteocenter_alternative_urls(model: str, date: str, parameter: str, region: str = None) -> list:
     """
     Generate a list of alternative URLs for MeteoCenter forecast images.
     This is useful when the primary URL fails to load.
@@ -214,6 +237,8 @@ def get_meteocenter_alternative_urls(model: str, date: str, parameter: str) -> l
         model (str): Model name (e.g., "GDPS", "GFS")
         date (str): Date in format YYYYMMDD
         parameter (str): Parameter code (e.g., "CAPE", "T850")
+        region (str, optional): Region code (e.g., "na" for North America,
+                               "us" for United States, "eu" for Europe)
         
     Returns:
         list: List of alternative URLs to try

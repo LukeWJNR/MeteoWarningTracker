@@ -148,7 +148,7 @@ class ForecastAnimation:
             logger.error(f"Error creating Lightning Wizard animation: {e}")
             return False
     
-    def create_meteocenter_animation(self, model, parameter, width=800):
+    def create_meteocenter_animation(self, model, parameter, width=800, region=None):
         """
         Create an animation from MeteoCenter forecast images
         
@@ -156,6 +156,8 @@ class ForecastAnimation:
             model (str): Model name (e.g., "GDPS", "GFS")
             parameter (str): Parameter code (e.g., "CAPE", "T850")
             width (int): Width of the animation in pixels
+            region (str, optional): Region code for the animation (e.g., "na" for North America,
+                                   "us" for United States, "eu" for Europe)
             
         Returns:
             bool: Success status
