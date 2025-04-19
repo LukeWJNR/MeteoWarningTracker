@@ -458,23 +458,23 @@ with st.spinner("Fetching weather data..."):
         st.session_state.forecast_hours
     )
         "APCP_SFC": fetch_and_process_data(
-            st.session_state.location["lat"], 
-            st.session_state.location["lon"], 
-            "APCP_SFC", 
-            st.session_state.forecast_hours
-        ),
-        "WIND_TGL_10": fetch_and_process_data(
-            st.session_state.location["lat"], 
-            st.session_state.location["lon"], 
-            "WIND_TGL_10", 
-            st.session_state.forecast_hours
-        ),
-        "RH_TGL_2": fetch_and_process_data(
-            st.session_state.location["lat"], 
-            st.session_state.location["lon"], 
-            "RH_TGL_2", 
-            st.session_state.forecast_hours
-        )
+        st.session_state.location["lat"], 
+        st.session_state.location["lon"], 
+        "APCP_SFC", 
+        st.session_state.forecast_hours
+    ),
+    "WIND_TGL_10": fetch_and_process_data(
+        st.session_state.location["lat"], 
+        st.session_state.location["lon"], 
+        "WIND_TGL_10", 
+        st.session_state.forecast_hours
+    ),
+    "RH_TGL_2": fetch_and_process_data(
+        st.session_state.location["lat"], 
+        st.session_state.location["lon"], 
+        "RH_TGL_2", 
+        st.session_state.forecast_hours
+    )
     }
     
     # Fetch additional parameters if any are selected
