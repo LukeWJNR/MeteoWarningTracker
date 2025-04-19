@@ -282,8 +282,7 @@ if st.session_state.hourly_forecast is not None and not st.session_state.hourly_
         xaxis_title='Time',
         yaxis_title='Temperature (°C)',
         yaxis2=dict(
-            title='Precipitation Probability (%)',
-            titlefont=dict(color='blue'),
+            title=dict(text='Precipitation Probability (%)', font=dict(color='blue')),
             tickfont=dict(color='blue'),
             anchor='x',
             overlaying='y',
@@ -383,8 +382,7 @@ if st.session_state.forecast_data is not None and not st.session_state.forecast_
             xaxis_title='Date',
             yaxis_title='Precipitation (mm)',
             yaxis2=dict(
-                title='Probability (%)',
-                titlefont=dict(color='navy'),
+                title=dict(text='Probability (%)', font=dict(color='navy')),
                 tickfont=dict(color='navy'),
                 anchor='x',
                 overlaying='y',
