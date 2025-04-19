@@ -59,6 +59,31 @@ def geocode_location(location_name):
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def fetch_and_process_data(lat, lon, parameter, forecast_hours=72):
     """Fetch and process weather data for a parameter"""
+    # First try to get data directly from NOAA GFS
+    try:
+        from utils.noaa_data import noaa_provider
+        logger.info(f"Attempting to fetch {parameter} data from NOAA GFS")
+        
+        df = noaa_provider.fetch_forecast_data(lat, lon, parameter, model="gfs", forecast_hours=forecast_hours)
+        
+        if df is not None and not df.empty:
+            logger.info(f"Successfully fetched {parameter} data from NOAA GFS")
+            
+            # Process based on parameter type
+            if parameter == "TMP_TGL_2":
+                return data_processor.process_temperature_data(df)
+            elif parameter == "APCP_SFC":
+                return data_processor.process_precipitation_data(df)
+            elif parameter == "WIND_TGL_10":
+                return data_processor.process_wind_data(df)
+            else:
+                return df
+        else:
+            logger.warning(f"No data returned from NOAA GFS for {parameter}, falling back to MeteoCenter")
+    except Exception as e:
+        logger.warning(f"Error fetching from NOAA: {e}, falling back to MeteoCenter")
+    
+    # Fall back to MeteoCenter if NOAA fails
     try:
         df = data_fetcher.fetch_gdps_data(parameter, lat, lon, forecast_hours)
         
@@ -79,6 +104,21 @@ def fetch_and_process_data(lat, lon, parameter, forecast_hours=72):
 @st.cache_data(ttl=3600)
 def fetch_weather_warnings(lat, lon, radius_km=50):
     """Fetch severe weather warnings"""
+    # First try direct access to NWS alerts API
+    try:
+        from utils.noaa_data import noaa_provider
+        logger.info(f"Attempting to fetch weather warnings from NWS API")
+        
+        warnings = noaa_provider.fetch_severe_warnings(lat, lon, radius_km)
+        if warnings:
+            logger.info(f"Successfully fetched warnings from NWS API")
+            return warnings
+        else:
+            logger.warning("No warnings returned from NWS API, falling back to MeteoCenter")
+    except Exception as e:
+        logger.warning(f"Error fetching warnings from NWS API: {e}, falling back to MeteoCenter")
+    
+    # Fall back to MeteoCenter
     try:
         return data_fetcher.fetch_severe_warnings(lat, lon, radius_km)
     except Exception as e:
@@ -88,6 +128,26 @@ def fetch_weather_warnings(lat, lon, radius_km=50):
 @st.cache_data(ttl=3600)
 def fetch_grid_data(parameter, lat, lon, forecast_hour=24):
     """Fetch gridded data for map visualization"""
+    # First try direct access to NOAA grid data
+    try:
+        from utils.noaa_data import noaa_provider
+        logger.info(f"Attempting to fetch grid data from NOAA GFS")
+        
+        # Create a bounding box around the location
+        margin = 1.0  # Degrees
+        bbox = (lon - margin, lat - margin, lon + margin, lat + margin)
+        
+        grid_data = noaa_provider.fetch_grid_data(parameter, bbox, model="gfs", forecast_hour=forecast_hour)
+        
+        if grid_data:
+            logger.info(f"Successfully fetched grid data from NOAA GFS")
+            return grid_data
+        else:
+            logger.warning("No grid data returned from NOAA GFS, falling back to MeteoCenter")
+    except Exception as e:
+        logger.warning(f"Error fetching grid data from NOAA: {e}, falling back to MeteoCenter")
+    
+    # Fall back to MeteoCenter
     try:
         # Create a bounding box around the location
         margin = 1.0  # Degrees
