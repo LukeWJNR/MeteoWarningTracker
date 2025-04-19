@@ -49,28 +49,24 @@ else:
     default_location_name = "Montreal, Quebec, Canada"
 
 # Import geocode function from app.py
-import sys
-sys.path.append('./')  # Add root directory to path
-try:
-    from app import geocode_location
-except ImportError:
-    # If import fails, define a basic geocode function
-    def geocode_location(location_name):
-        import requests
-        try:
-            url = f"https://nominatim.openstreetmap.org/search?q={location_name}&format=json&limit=1"
-            response = requests.get(url, headers={"User-Agent": "Weather App"})
-            data = response.json()
-            if data:
-                return {
-                    "lat": float(data[0]["lat"]),
-                    "lon": float(data[0]["lon"]),
-                    "display_name": data[0]["display_name"]
-                }
-            return None
-        except Exception as e:
-            st.error(f"Error geocoding location: {e}")
-            return None
+# Define a basic geocode function
+# Don't import from app.py to avoid circular imports
+def geocode_location(location_name):
+    import requests
+    try:
+        url = f"https://nominatim.openstreetmap.org/search?q={location_name}&format=json&limit=1"
+        response = requests.get(url, headers={"User-Agent": "Weather App"})
+        data = response.json()
+        if data:
+            return {
+                "lat": float(data[0]["lat"]),
+                "lon": float(data[0]["lon"]),
+                "display_name": data[0]["display_name"]
+            }
+        return None
+    except Exception as e:
+        st.error(f"Error geocoding location: {e}")
+        return None
 
 # Location search interface
 location_input = st.sidebar.text_input("Search Location", value=default_location_name)
