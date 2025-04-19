@@ -107,11 +107,11 @@ with col1:
                 
                 # Get hourly data for today
                 time_now = datetime.now()
-                start = time_now - timedelta(hours=24)  # Get last 24 hours to ensure we have data
-                end = time_now
+                start_date = (time_now - timedelta(hours=24)).date()  # Get last 24 hours to ensure we have data
+                end_date = time_now.date()
                 
                 # Fetch hourly data
-                data = Hourly(location, start, end)
+                data = Hourly(location, start_date, end_date)
                 df = data.fetch()
                 
                 if not df.empty:
