@@ -641,15 +641,35 @@ class MeteoDataFetcher:
     def generate_sample_data(self, parameter, hours=72):
         """
         Generate sample data for testing.
-        Should only be used if the actual API is unavailable.
+        For real forecast data, try to use the NOAA provider first.
         
         Args:
             parameter (str): Parameter code
             hours (int): Number of forecast hours
             
         Returns:
-            pd.DataFrame: Sample data
+            pd.DataFrame: Forecast data
         """
+        # First try to get real data from NOAA (added in the direct NCEP integration)
+        try:
+            from utils.noaa_data import noaa_provider
+            logger.info(f"Attempting to fetch {parameter} data from NOAA GFS")
+            
+            # Fetch data from NOAA GFS model - we need to pass lat/lon
+            # Since this is inside generate_sample_data which doesn't have lat/lon parameters,
+            # we'll use a hardcoded default location for now (Montreal)
+            default_lat, default_lon = 45.5017, -73.5673
+            df = noaa_provider.fetch_forecast_data(default_lat, default_lon, parameter, model="gfs", forecast_hours=hours)
+            
+            if df is not None and not df.empty:
+                logger.info(f"Successfully fetched {parameter} data from NOAA GFS")
+                return df
+                
+            logger.warning(f"Could not fetch {parameter} data from NOAA GFS, falling back to sample data")
+        except Exception as e:
+            logger.error(f"Error fetching from NOAA: {e}")
+            
+        # Fall back to sample data if NOAA data fetch fails
         # Create a time series for the forecast period
         now = datetime.utcnow()
         time_index = [now + timedelta(hours=h) for h in range(hours)]
