@@ -75,7 +75,23 @@ with tab1:
     # Generate animation button
     if st.button("Generate MeteoCenter Animation"):
         with st.spinner("Generating animation, please wait..."):
-            animation_handler.create_meteocenter_animation(model, parameter)
+            # Map Streamlit regions to parameter-appropriate regions for URL construction
+            region_code = "NA"  # Default to North America
+            if region == "North America":
+                region_code = "NA"
+            elif region in ["Quebec", "Ontario", "Atlantic", "Prairies", "Pacific"]:
+                region_code = region[:2].upper()  # Get first two letters as code
+                
+            # Include the region parameter in the animation call
+            st.info(f"Attempting to fetch {model} {parameter} animation for {region} region...")
+            success = animation_handler.create_meteocenter_animation(model, parameter, width=800)
+            
+            if not success:
+                st.warning("Could not generate the animation. The MeteoCenter server might be temporarily unavailable or the specific parameter/region combination doesn't exist.")
+                st.markdown("You might want to try:")
+                st.markdown("1. A different parameter (like T850 or MSLP)")
+                st.markdown("2. A different model (like GFS)")
+                st.markdown("3. Try again later as the service might be temporarily down")
 
 with tab2:
     st.markdown("### Lightning Wizard Animations")
@@ -136,7 +152,15 @@ with tab2:
         # Button to generate the animation
         if st.button("Generate Lightning Wizard Animation"):
             with st.spinner("Generating animation, please wait..."):
-                animation_handler.create_lightning_wizard_animation(url_input)
+                st.info(f"Attempting to fetch animation from Lightning Wizard...")
+                success = animation_handler.create_lightning_wizard_animation(url_input)
+                
+                if not success:
+                    st.warning("Could not generate the Lightning Wizard animation. The server might be temporarily unavailable.")
+                    st.markdown("If you're having trouble with this animation, you can try:")
+                    st.markdown("1. One of the predefined animation buttons above")
+                    st.markdown("2. A different Lightning Wizard URL")
+                    st.markdown("3. Try again later as the service might be temporarily down")
     
     st.markdown("---")
     st.caption("Animation data provided by Lightning Wizard and MeteoCenter. This tool analyzes and displays publicly available forecast images.")

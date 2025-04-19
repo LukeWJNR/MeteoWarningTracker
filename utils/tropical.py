@@ -14,7 +14,8 @@ from datetime import datetime, timedelta
 import folium
 from tropycal.tracks import TrackDataset
 from tropycal.recon import ReconDataset
-from tropycal.current import Current
+# tropycal.current module might not be available in the current version
+# We'll implement a fallback mechanism
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,15 @@ class TropicalStormTracker:
                 self.recon_data = ReconDataset()
                 
                 # Initialize current storm data
-                self.current_data = Current(jtwc=True)
+                try:
+                    # Try to import the Current module dynamically since it might not be available
+                    from importlib import import_module
+                    current_module = import_module('tropycal.current')
+                    Current = getattr(current_module, 'Current')
+                    self.current_data = Current(jtwc=True)
+                except (ImportError, AttributeError) as e:
+                    logger.warning(f"Tropycal Current module not available: {e}")
+                    self.current_data = None
                 
                 self.latest_update = datetime.now()
                 
@@ -71,6 +80,11 @@ class TropicalStormTracker:
         """
         try:
             if not self.init_data():
+                return []
+            
+            # Check if current_data module is available
+            if self.current_data is None:
+                logger.warning("Current storm data module not available")
                 return []
             
             # Fetch current storms
@@ -130,6 +144,11 @@ class TropicalStormTracker:
         """
         try:
             if not self.init_data():
+                return None
+                
+            # Check if current_data module is available
+            if self.current_data is None:
+                logger.warning("Current storm data module not available")
                 return None
             
             # Fetch current storm object
@@ -199,6 +218,11 @@ class TropicalStormTracker:
                 tiles='CartoDB positron'
             )
             
+            # Check if current_data module is available
+            if self.current_data is None:
+                logger.warning("Current storm data module not available")
+                return m  # Return the basic map without detailed tracks
+                
             # Get detailed storm data from the current module
             storm_obj = self.current_data.get_storm(target_storm["id"])
             
@@ -383,6 +407,11 @@ class TropicalStormTracker:
                 return {}
             
             if current:
+                # Check if current_data module is available
+                if self.current_data is None:
+                    logger.warning("Current storm data module not available")
+                    return {}
+                
                 # Get active storm from current module
                 storm = self.current_data.get_storm(storm_id)
                 
