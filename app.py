@@ -427,14 +427,36 @@ st.markdown(f"Coordinates: {st.session_state.location['lat']:.4f}, {st.session_s
 
 # Display loading message
 with st.spinner("Fetching weather data..."):
-    # Fetch data for main parameters
-    data = {
-        "TMP_TGL_2": fetch_and_process_data(
-            st.session_state.location["lat"], 
-            st.session_state.location["lon"], 
-            "TMP_TGL_2", 
-            st.session_state.forecast_hours
-        ),
+    # Use concurrent execution for faster data fetching
+    import concurrent.futures
+    
+    @st.cache_data(ttl=3600)
+    def fetch_all_parameters(lat, lon, forecast_hours):
+        parameters = ["TMP_TGL_2", "APCP_SFC", "WIND_TGL_10", "RH_TGL_2"]
+        data = {}
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            future_to_param = {
+                executor.submit(fetch_and_process_data, lat, lon, param, forecast_hours): param 
+                for param in parameters
+            }
+            
+            for future in concurrent.futures.as_completed(future_to_param):
+                param = future_to_param[future]
+                try:
+                    data[param] = future.result()
+                except Exception as e:
+                    logger.error(f"Error fetching {param}: {e}")
+                    data[param] = None
+        
+        return data
+    
+    # Fetch data for main parameters concurrently
+    data = fetch_all_parameters(
+        st.session_state.location["lat"],
+        st.session_state.location["lon"],
+        st.session_state.forecast_hours
+    )
         "APCP_SFC": fetch_and_process_data(
             st.session_state.location["lat"], 
             st.session_state.location["lon"], 
