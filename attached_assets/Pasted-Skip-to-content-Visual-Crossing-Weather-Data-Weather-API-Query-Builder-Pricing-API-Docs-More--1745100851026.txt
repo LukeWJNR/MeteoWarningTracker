@@ -1,0 +1,225 @@
+Skip to content
+Visual Crossing
+Weather Data
+Weather API
+Query Builder
+Pricing
+API Docs
+More
+
+English
+Search
+
+Sign in
+Sign up
+Weather Query Builder
+You aren't signed into an account. Some features will be restricted. Sign in or Sign up.
+Addresses, partial addresses or lat,lon 
+History or forecast data 
+Data units 
+Query options
+Data and API Design
+Format Previews
+The JSON has been truncated to a single day preview.
+{
+ "queryCost": 1,
+ "latitude": 48.8822,
+ "longitude": 2.32599,
+ "resolvedAddress": "Europe, Paris, Île-de-France, France",
+ "address": "europe",
+ "timezone": "Europe/Paris",
+ "tzoffset": 2,
+ "description": "Similar temperatures continuing with a chance of rain multiple days.",
+ "days": [
+  {
+   "datetime": "2025-04-20",
+   "datetimeEpoch": 1745100000,
+   "tempmax": 63.8,
+   "tempmin": 52.2,
+   "temp": 56.8,
+   "feelslikemax": 63.8,
+   "feelslikemin": 52.2,
+   "feelslike": 56.8,
+   "dew": 44.7,
+   "humidity": 65.6,
+   "precip": 0.004,
+   "precipprob": 67.7,
+   "precipcover": 4.17,
+   "preciptype": [
+    "rain"
+   ],
+   "snow": 0,
+   "snowdepth": 0,
+   "windgust": 31.8,
+   "windspeed": 13.2,
+   "winddir": 149.5,
+   "pressure": 1003.6,
+   "cloudcover": 88.8,
+   "visibility": 14,
+   "solarradiation": 123.3,
+   "solarenergy": 10.6,
+   "uvindex": 7,
+   "severerisk": 10,
+   "sunrise": "06:49:52",
+   "sunriseEpoch": 1745124592,
+   "sunset": "20:50:21",
+   "sunsetEpoch": 1745175021,
+   "moonphase": 0.75,
+   "conditions": "Rain, Partially cloudy",
+   "description": "Partly cloudy throughout the day with late afternoon rain.",
+   "icon": "rain",
+   "stations": null,
+   "source": "fcst",
+   "hours": [
+    {
+     "datetime": "12:00:00",
+     "datetimeEpoch": 1745143200,
+     "temp": 55.7,
+     "feelslike": 55.7,
+     "humidity": 57.93,
+     "dew": 41.1,
+     "precip": 0,
+     "precipprob": 45.2,
+     "snow": 0,
+     "snowdepth": 0,
+     "preciptype": [
+      "rain"
+     ],
+     "windgust": 23.5,
+     "windspeed": 9.2,
+     "winddir": 192.4,
+     "pressure": 1005,
+     "visibility": 15,
+     "cloudcover": 100,
+     "solarradiation": 66,
+     "solarenergy": 0.2,
+     "uvindex": 1,
+     "severerisk": 10,
+     "conditions": "Rain, Overcast",
+     "icon": "rain",
+     "stations": null,
+     "source": "fcst"
+    },
+    {
+     "datetime": "13:00:00",
+     "datetimeEpoch": 1745146800,
+     "temp": 57.8,
+     "feelslike": 57.8,
+     "humidity": 53.22,
+     "dew": 40.9,
+     "precip": 0,
+     "precipprob": 45.2,
+     "snow": 0,
+     "snowdepth": 0,
+     "preciptype": [
+      "rain"
+     ],
+     "windgust": 21.5,
+     "windspeed": 8.7,
+     "winddir": 156.1,
+     "pressure": 1005,
+     "visibility": 15,
+     "cloudcover": 92.4,
+     "solarradiation": 444,
+     "solarenergy": 1.6,
+     "uvindex": 4,
+     "severerisk": 10,
+     "conditions": "Rain, Overcast",
+     "icon": "rain",
+     "stations": null,
+     "source": "fcst"
+    }
+   ]
+  }
+ ],
+ "alerts": [],
+ "stations": {
+  "D7697": {
+   "distance": 11710,
+   "latitude": 48.873,
+   "longitude": 2.485,
+   "useCount": 0,
+   "id": "D7697",
+   "name": "DW7697 Rosny Sous Bois FR",
+   "quality": 0,
+   "contribution": 0
+  },
+  "LFPV": {
+   "distance": 15532,
+   "latitude": 48.77,
+   "longitude": 2.2,
+   "useCount": 0,
+   "id": "LFPV",
+   "name": "LFPV",
+   "quality": 50,
+   "contribution": 0
+  },
+  "LFPB": {
+   "distance": 13334,
+   "latitude": 48.97,
+   "longitude": 2.45,
+   "useCount": 0,
+   "id": "LFPB",
+   "name": "LFPB",
+   "quality": 50,
+   "contribution": 0
+  }
+ },
+ "currentConditions": {
+  "datetime": "23:42:00",
+  "datetimeEpoch": 1745098920,
+  "temp": 59.2,
+  "feelslike": 59.2,
+  "humidity": 88.8,
+  "dew": 55.9,
+  "precip": 0,
+  "precipprob": 0,
+  "snow": 0,
+  "snowdepth": 0,
+  "preciptype": null,
+  "windgust": 12.1,
+  "windspeed": 8.9,
+  "winddir": 45,
+  "pressure": 1002,
+  "visibility": 6.2,
+  "cloudcover": 88,
+  "solarradiation": 0,
+  "solarenergy": 0,
+  "uvindex": 0,
+  "conditions": "Partially cloudy",
+  "icon": "partly-cloudy-night",
+  "stations": [
+   "LFPV",
+   "D7697",
+   "LFPB"
+  ],
+  "source": "obs",
+  "sunrise": "06:49:52",
+  "sunriseEpoch": 1745124592,
+  "sunset": "20:50:21",
+  "sunsetEpoch": 1745175021,
+  "moonphase": 0.75
+ }
+}
+ 
+
+Weather
+Weather Data
+Weather API
+Excel Weather
+About
+About Us
+Support
+Documentation
+Profile
+Sign up
+Account
+Usage
+Contact Us
+ sales@visualcrossing.com
+Support
+© 2025 All right reserved Visual Crossing Corporation
+
+Terms of use
+Privacy policy
+Scroll to Top
