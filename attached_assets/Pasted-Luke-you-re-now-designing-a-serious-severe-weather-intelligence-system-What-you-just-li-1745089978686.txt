@@ -1,0 +1,108 @@
+Luke — you're now designing a **serious severe weather intelligence system** 💥⚡📡. What you just listed is practically a **meteorologist-grade analysis suite** — and you’re spot on.
+
+---
+
+### ✅ What You're Asking For:
+
+You want your **severe weather app** to include:
+- Full vertical thermodynamics (CAPE, CIN, LFC, LCL, EL)
+- Wind shear, helicity, divergence, temperature lapse rates
+- PVU-based tropopause diagnostics
+- Hail & tornado indices (like STP, SCP)
+- Convection and MCS prediction metrics
+
+This is **exactly what SHARPpy** is built for.
+
+---
+
+## 🔬 RECOMMENDATION: Use **SHARPpy** for Data Analysis + Output Grids
+
+- **SHARPpy** is a full sounding analysis toolkit:  
+  → Computes everything you mentioned using vertical profile (sounding) data  
+  → Designed for research + forecasting  
+  → You can run it as a **local Python server** or use it to **generate NetCDF/GeoJSON** for your web frontend
+
+---
+
+### ✅ GitHub & Docs
+
+- 🔗 GitHub: [https://github.com/sharppy/SHARPpy](https://github.com/sharppy/SHARPpy)
+- 📖 Docs: [https://sharppy.github.io/SHARPpy/](https://sharppy.github.io/SHARPpy/)
+
+---
+
+## ✅ How to Integrate SHARPpy with Your Web App:
+
+---
+
+### 💻 1. **Run SHARPpy in Python (Backend or Local Tool)**
+
+You can:
+- Download or generate **.snd files** or **model soundings (BUFR, NetCDF)**
+- Feed them into SHARPpy
+- Output a JSON with:
+  - CAPE, LCL, LFC, EL
+  - Shear vectors
+  - STP/SCP
+  - Lapse rates
+
+### 📡 2. **Use Output in Web App Dashboard**
+
+On your frontend (`/severe-weather` page):
+- Add an “Advanced Analysis” card
+- Display SHARPpy-calculated:
+  - STP, SCP, lapse rates
+  - Thermodynamic profile image (Skew-T)
+  - Dynamic tropopause temperature
+
+Example:
+
+```tsx
+<div style={{ padding: "1rem", border: "1px solid #ccc" }}>
+  <h3>Severe Index Snapshot (SHARPpy)</h3>
+  <p><strong>CAPE:</strong> 2746 J/kg</p>
+  <p><strong>STP:</strong> 3.2</p>
+  <p><strong>LCL:</strong> 950m | <strong>LFC:</strong> 1080m</p>
+  <p><strong>Deep Layer Shear:</strong> 32 knots</p>
+  <p><strong>Supercell Composite:</strong> 5.1</p>
+</div>
+```
+
+---
+
+### 🧠 Bonus: Use Skew-T Plots
+
+SHARPpy outputs **Skew-T diagrams** (as images or matplotlib plots) → You can serve them into your Next.js app via static or API endpoint.
+
+---
+
+## ✅ TL;DR: What to Do Next
+
+---
+
+### Step 1: Clone SHARPpy  
+```bash
+git clone https://github.com/sharppy/SHARPpy.git
+cd SHARPpy
+pip install -r requirements.txt
+```
+
+---
+
+### Step 2: Run Analysis  
+Use `runsharp.py` to analyze a sounding file or use `profile.create_profile()` with model data
+
+---
+
+### Step 3: Output JSON  
+Save CAPE, STP, LFC, etc., to JSON → load it in your Next.js app
+
+---
+
+### Want Help Doing That?
+
+### A. **Yes, Help Me Run SHARPpy on Replit or Locally**  
+### B. **I Want a Ready JSON to Plug In** — Just use mock SHARPpy data for now  
+### C. **Back to Frontend:** Add visual panel in `/weather-forecast` to show this
+
+Type or say A, B, or C to continue, or reply with more detail.

@@ -23,4 +23,6 @@ dependencies = [
     "tropycal>=1.3",
     "siphon>=0.10.0",
     "metpy>=1.6.3",
+    "shapely>=2.1.0",
+    "sharppy>=1.4.0a3",
 ]
