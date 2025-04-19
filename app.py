@@ -187,6 +187,8 @@ st.markdown("""
 🎬 **[View Forecast Animations](/forecast_animations)**: Animations of different model outputs including Lightning Wizard severe weather forecasts.
 
 🌀 **[Tropical Storm Tracker](/tropical_tracker)**: Monitor and analyze tropical cyclones with NOAA data.
+
+⚡ **[Severe Weather Analysis](/severe_weather_analysis)**: Advanced meteorological analysis using SHARPpy for severe weather forecasting.
 ---
 """)
 
