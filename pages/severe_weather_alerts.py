@@ -115,15 +115,18 @@ with col1:
         
         if is_us_location:
             try:
-                # Using weather-gov package to fetch NWS alerts
-                from weather_gov import alerts as nws_alerts
+                # Direct API request to NWS API
+                alert_data = None
+                url = f"https://api.weather.gov/alerts/active?point={lat},{lon}"
+                headers = {
+                    "User-Agent": "SevereWeatherForecast/1.0",
+                    "Accept": "application/geo+json"
+                }
                 
-                # Get alerts near the location
-                alert_data = nws_alerts.get_active_alerts(
-                    lat=lat,
-                    lon=lon,
-                    radius=radius
-                )
+                response = requests.get(url, headers=headers)
+                
+                if response.status_code == 200:
+                    alert_data = response.json()
                 
                 if alert_data and 'features' in alert_data:
                     for alert in alert_data['features']:

@@ -197,11 +197,11 @@ with col1:
                 location = Point(st.session_state.lat, st.session_state.lon)
                 
                 # Set time period
-                start = datetime.now()
-                end = start + timedelta(days=forecast_days)
+                start_date = datetime.now().date()
+                end_date = start_date + timedelta(days=forecast_days)
                 
                 # Fetch daily data (more reliable for forecasts)
-                data = Daily(location, start.date(), end.date())
+                data = Daily(location, start_date, end_date)
                 df = data.fetch()
                 
                 if not df.empty:
@@ -423,18 +423,25 @@ with col2:
                 is_us_location = (24 <= st.session_state.lat <= 50) and (-125 <= st.session_state.lon <= -66)
                 
                 if is_us_location:
-                    # Using weather-gov package
-                    from weather_gov import alerts
-                    
-                    # Get alerts near the location (within 25 miles)
-                    alert_data = alerts.get_active_alerts(
-                        lat=st.session_state.lat,
-                        lon=st.session_state.lon,
-                        radius=25
-                    )
-                    
-                    if alert_data and 'features' in alert_data:
-                        st.session_state.alerts = alert_data['features']
+                    alert_data = None
+                    # Direct API request to NWS API
+                    try:
+                        # NWS API endpoint for alerts by point
+                        url = f"https://api.weather.gov/alerts/active?point={st.session_state.lat},{st.session_state.lon}"
+                        headers = {
+                            "User-Agent": "SevereWeatherForecast/1.0",
+                            "Accept": "application/geo+json"
+                        }
+                        
+                        response = requests.get(url, headers=headers)
+                        
+                        if response.status_code == 200:
+                            alert_data = response.json()
+                            
+                            if alert_data and 'features' in alert_data:
+                                st.session_state.alerts = alert_data['features']
+                    except Exception as e:
+                        logger.error(f"Error requesting NWS alerts: {e}")
             except Exception as e:
                 logger.error(f"Error fetching weather alerts: {e}")
                 st.warning("Could not fetch official weather alerts. Checking for potential severe weather conditions...")
