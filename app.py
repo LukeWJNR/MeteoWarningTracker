@@ -1,827 +1,669 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import folium
-from streamlit_folium import folium_static
+import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.graph_objects as go
+import folium
+from streamlit_folium import folium_static
+import requests
+import json
 from datetime import datetime, timedelta
 import time
-from sqlalchemy import text
-from utils.data_fetcher import MeteoDataFetcher
-from utils.data_processor import WeatherDataProcessor
-from utils.visualizations import WeatherVisualizer
-from utils.database import db
-from utils.lightning_wizard import lightning_wizard
-import json
+import io
+from PIL import Image
 import logging
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-import requests
-import logging
+from meteostat import Point, Daily, Hourly
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize services
-data_fetcher = MeteoDataFetcher()
-data_processor = WeatherDataProcessor()
-visualizer = WeatherVisualizer()
-
 # Page configuration
 st.set_page_config(
-    page_title="Weather Forecast | MeteoCenter GDPS",
-    page_icon="☁️",
+    page_title="Severe Weather Forecast",
+    page_icon="🌩️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Helper functions for geocoding
-def geocode_location(location_name):
-    """Convert a location name to lat/lon coordinates"""
-    try:
-        url = f"https://nominatim.openstreetmap.org/search?q={location_name}&format=json&limit=1"
-        response = requests.get(url, headers={"User-Agent": "WeatherForecastApp/1.0"})
-        data = response.json()
-        if data and len(data) > 0:
-            return {
-                "lat": float(data[0]["lat"]),
-                "lon": float(data[0]["lon"]),
-                "display_name": data[0]["display_name"]
-            }
-        return None
-    except Exception as e:
-        st.error(f"Error geocoding location: {e}")
-        return None
-
-@st.cache_data(ttl=3600)  # Cache for 1 hour
-def fetch_and_process_data(lat, lon, parameter, forecast_hours=72):
-    """Fetch and process weather data for a parameter"""
-    # First try to get data directly from NOAA GFS
-    try:
-        from utils.noaa_data import noaa_provider
-        logger.info(f"Attempting to fetch {parameter} data from NOAA GFS")
-        
-        df = noaa_provider.fetch_forecast_data(lat, lon, parameter, model="gfs", forecast_hours=forecast_hours)
-        
-        if df is not None and not df.empty:
-            logger.info(f"Successfully fetched {parameter} data from NOAA GFS")
-            
-            # Process based on parameter type
-            if parameter == "TMP_TGL_2":
-                return data_processor.process_temperature_data(df)
-            elif parameter == "APCP_SFC":
-                return data_processor.process_precipitation_data(df)
-            elif parameter == "WIND_TGL_10":
-                return data_processor.process_wind_data(df)
-            else:
-                return df
-        else:
-            logger.warning(f"No data returned from NOAA GFS for {parameter}, falling back to MeteoCenter")
-    except Exception as e:
-        logger.warning(f"Error fetching from NOAA: {e}, falling back to MeteoCenter")
-    
-    # Fall back to MeteoCenter if NOAA fails
-    try:
-        df = data_fetcher.fetch_gdps_data(parameter, lat, lon, forecast_hours)
-        
-        # Process based on parameter type
-        if parameter == "TMP_TGL_2":
-            return data_processor.process_temperature_data(df)
-        elif parameter == "APCP_SFC":
-            return data_processor.process_precipitation_data(df)
-        elif parameter == "WIND_TGL_10":
-            return data_processor.process_wind_data(df)
-        else:
-            return df
-    except Exception as e:
-        logger.error(f"Error fetching data for {parameter}: {e}")
-        # For demo/testing only - would be removed in production
-        return data_fetcher.generate_sample_data(parameter, forecast_hours)
-
-@st.cache_data(ttl=3600)
-def fetch_weather_warnings(lat, lon, radius_km=50):
-    """Fetch severe weather warnings"""
-    # First try direct access to NWS alerts API
-    try:
-        from utils.noaa_data import noaa_provider
-        logger.info(f"Attempting to fetch weather warnings from NWS API")
-        
-        warnings = noaa_provider.fetch_severe_warnings(lat, lon, radius_km)
-        if warnings:
-            logger.info(f"Successfully fetched warnings from NWS API")
-            return warnings
-        else:
-            logger.warning("No warnings returned from NWS API, falling back to MeteoCenter")
-    except Exception as e:
-        logger.warning(f"Error fetching warnings from NWS API: {e}, falling back to MeteoCenter")
-    
-    # Fall back to MeteoCenter
-    try:
-        return data_fetcher.fetch_severe_warnings(lat, lon, radius_km)
-    except Exception as e:
-        logger.error(f"Error fetching weather warnings: {e}")
-        return []
-
-@st.cache_data(ttl=3600)
-def fetch_grid_data(parameter, lat, lon, forecast_hour=24):
-    """Fetch gridded data for map visualization"""
-    # First try direct access to NOAA grid data
-    try:
-        from utils.noaa_data import noaa_provider
-        logger.info(f"Attempting to fetch grid data from NOAA GFS")
-        
-        # Create a bounding box around the location
-        margin = 1.0  # Degrees
-        bbox = (lon - margin, lat - margin, lon + margin, lat + margin)
-        
-        grid_data = noaa_provider.fetch_grid_data(parameter, bbox, model="gfs", forecast_hour=forecast_hour)
-        
-        if grid_data:
-            logger.info(f"Successfully fetched grid data from NOAA GFS")
-            return grid_data
-        else:
-            logger.warning("No grid data returned from NOAA GFS, falling back to MeteoCenter")
-    except Exception as e:
-        logger.warning(f"Error fetching grid data from NOAA: {e}, falling back to MeteoCenter")
-    
-    # Fall back to MeteoCenter
-    try:
-        # Create a bounding box around the location
-        margin = 1.0  # Degrees
-        bbox = (lon - margin, lat - margin, lon + margin, lat + margin)
-        return data_fetcher.fetch_grid_data(parameter, bbox, forecast_hour)
-    except Exception as e:
-        logger.error(f"Error fetching grid data: {e}")
-        return None
-
-# Define initialization for session state
-if 'location' not in st.session_state:
-    st.session_state.location = {
-        "lat": 45.5017,  # Montreal coordinates as default
-        "lon": -73.5673,
-        "display_name": "Montreal, Quebec, Canada"
-    }
-
-if 'forecast_hours' not in st.session_state:
-    st.session_state.forecast_hours = 72
-
-if 'selected_parameter' not in st.session_state:
-    st.session_state.selected_parameter = "TMP_TGL_2"
-
-if 'forecast_hour_for_map' not in st.session_state:
-    st.session_state.forecast_hour_for_map = 24
-
-# Title and introduction
-st.title("GDPS 15km Weather Forecast")
-st.markdown("### Global Deterministic Prediction System - Comprehensive Weather Data")
-st.markdown("This application provides detailed forecast visualizations from the Global Deterministic Prediction System (GDPS) 15km model, with access to over 30 meteorological parameters at various atmospheric levels.")
-
-# Add links to all available pages
+# Title and description
+st.title("🌩️ Severe Weather Forecast")
 st.markdown("""
----
-📊 **Main Dashboard**: Current view - Data-driven forecasts with interactive visualizations.
-
-🎬 **[View Forecast Animations](/forecast_animations)**: Animations of different model outputs including Lightning Wizard severe weather forecasts.
-
-🌀 **[Tropical Storm Tracker](/tropical_tracker)**: Monitor and analyze tropical cyclones with NOAA data.
-
-⚡ **[Severe Weather Analysis](/severe_weather_analysis)**: Advanced meteorological analysis using SHARPpy for severe weather forecasting.
----
+This application provides accurate severe weather forecasts using reliable data sources.
+Enter a location to view current conditions, forecasts, and potential severe weather alerts.
 """)
 
-# Sidebar for location search and configuration
-with st.sidebar:
-    st.header("Location Settings")
-    
-    # Location search
-    location_input = st.text_input("Search Location", 
-                                  value=st.session_state.location["display_name"] if "display_name" in st.session_state.location else "")
-    
-    search_button = st.button("Search")
-    
-    if search_button and location_input:
-        with st.spinner("Searching location..."):
-            geocoded = geocode_location(location_input)
-            if geocoded:
-                st.session_state.location = geocoded
-                st.success(f"Found: {geocoded['display_name']}")
+# Initialize session state for persistence
+if 'location' not in st.session_state:
+    st.session_state.location = "New York, NY"
+if 'lat' not in st.session_state:
+    st.session_state.lat = 40.7128
+if 'lon' not in st.session_state:
+    st.session_state.lon = -74.0060
+if 'forecast_data' not in st.session_state:
+    st.session_state.forecast_data = {}
+if 'current_weather' not in st.session_state:
+    st.session_state.current_weather = None
+if 'alerts' not in st.session_state:
+    st.session_state.alerts = []
+
+# Sidebar for location input
+st.sidebar.header("Location")
+location_input = st.sidebar.text_input("Enter Location", value=st.session_state.location)
+
+# Search button
+if st.sidebar.button("Search Location"):
+    try:
+        # Geocode the location using Nominatim (OpenStreetMap)
+        geocode_url = f"https://nominatim.openstreetmap.org/search?q={location_input}&format=json&limit=1"
+        headers = {'User-Agent': 'SevereWeatherForecast/1.0'}
+        response = requests.get(geocode_url, headers=headers)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data and len(data) > 0:
+                st.session_state.lat = float(data[0]['lat'])
+                st.session_state.lon = float(data[0]['lon'])
+                st.session_state.location = location_input
+                
+                # Clear cached data to force refresh
+                st.session_state.forecast_data = {}
+                st.session_state.current_weather = None
+                st.session_state.alerts = []
+                
+                st.sidebar.success(f"Location set to: {location_input}")
             else:
-                st.error("Location not found. Please try a different search term.")
-    
-    # Forecast time range
-    st.header("Forecast Settings")
-    
-    forecast_hours = st.select_slider(
-        "Forecast Hours",
-        options=[24, 48, 72, 96, 120, 144, 168],
-        value=st.session_state.forecast_hours
-    )
-    
-    if forecast_hours != st.session_state.forecast_hours:
-        st.session_state.forecast_hours = forecast_hours
-    
-    # Parameter for map visualization
-    st.header("Map Settings")
-    
-    map_params = [
-        # Temperature parameters
-        {"code": "TMP_TGL_2", "name": "Temperature (2m)"},
-        {"code": "TMP_TGL_0", "name": "Surface Temperature"},
-        {"code": "TMP_ISBL_500", "name": "Temperature at 500 hPa"},
-        {"code": "TMP_ISBL_850", "name": "Temperature at 850 hPa"},
-        {"code": "TMAX_TGL_2", "name": "Max Temperature (2m)"},
-        {"code": "TMIN_TGL_2", "name": "Min Temperature (2m)"},
-        
-        # Precipitation parameters
-        {"code": "APCP_SFC", "name": "Total Precipitation"},
-        {"code": "ACPCP_SFC", "name": "Convective Precipitation"},
-        {"code": "SNOD_SFC", "name": "Snow Depth"},
-        {"code": "CRAIN_SFC", "name": "Categorical Rain"},
-        {"code": "CSNOW_SFC", "name": "Categorical Snow"},
-        
-        # Wind parameters
-        {"code": "WIND_TGL_10", "name": "Wind Speed (10m)"},
-        {"code": "WDIR_TGL_10", "name": "Wind Direction (10m)"},
-        {"code": "GUST_TGL_10", "name": "Wind Gust (10m)"},
-        {"code": "WIND_ISBL_250", "name": "Wind Speed (250 hPa)"},
-        
-        # Pressure parameters
-        {"code": "PRMSL_MSL", "name": "Sea Level Pressure"},
-        {"code": "PRES_SFC", "name": "Surface Pressure"},
-        {"code": "HGT_ISBL_500", "name": "500 hPa Height"},
-        
-        # Humidity parameters
-        {"code": "RH_TGL_2", "name": "Relative Humidity (2m)"},
-        {"code": "RH_ISBL_700", "name": "Relative Humidity (700 hPa)"},
-        {"code": "PWAT_EATM", "name": "Precipitable Water"},
-        
-        # Cloud parameters
-        {"code": "TCDC_SFC", "name": "Total Cloud Cover"},
-        {"code": "LCDC_LOW", "name": "Low Cloud Cover"},
-        {"code": "MCDC_MID", "name": "Medium Cloud Cover"},
-        {"code": "HCDC_HIGH", "name": "High Cloud Cover"},
-        
-        # Severe weather parameters
-        {"code": "CAPE_SFC", "name": "CAPE"},
-        {"code": "CIN_SFC", "name": "CIN"},
-        {"code": "LFTX_SFC", "name": "Lifted Index"},
-    ]
-    
-    selected_param = st.selectbox(
-        "Select Parameter for Map",
-        options=[p["code"] for p in map_params],
-        format_func=lambda x: next((p["name"] for p in map_params if p["code"] == x), x),
-        index=0
-    )
-    
-    forecast_hour_for_map = st.slider(
-        "Forecast Hour for Map",
-        min_value=0,
-        max_value=st.session_state.forecast_hours,
-        value=min(24, st.session_state.forecast_hours),
-        step=6
-    )
-    
-    st.session_state.selected_parameter = selected_param
-    st.session_state.forecast_hour_for_map = forecast_hour_for_map
-    
-    # Additional parameter selection for charts
-    st.header("Chart Settings")
-    
-    # Group parameters by type
-    param_groups = {
-        "Temperature": [p for p in map_params if any(x in p["code"] for x in ["TMP", "TMAX", "TMIN"])],
-        "Precipitation": [p for p in map_params if any(x in p["code"] for x in ["PCP", "SNOW", "RAIN"])],
-        "Wind": [p for p in map_params if any(x in p["code"] for x in ["WIND", "WDIR", "GUST", "UGRD", "VGRD"])],
-        "Pressure": [p for p in map_params if any(x in p["code"] for x in ["PRMSL", "PRES", "HGT"])],
-        "Humidity": [p for p in map_params if any(x in p["code"] for x in ["RH", "SPFH", "PWAT"])],
-        "Clouds": [p for p in map_params if "CDC" in p["code"]],
-        "Severe Weather": [p for p in map_params if any(x in p["code"] for x in ["CAPE", "CIN", "LFTX"])]
-    }
-    
-    # Create a multi-select for additional parameters
-    selected_group = st.selectbox(
-        "Parameter Category",
-        options=list(param_groups.keys()),
-        index=0
-    )
-    
-    if selected_group in param_groups:
-        additional_params = st.multiselect(
-            "Additional Parameters to Chart",
-            options=[p["code"] for p in param_groups[selected_group]],
-            default=[],
-            format_func=lambda x: next((p["name"] for p in map_params if p["code"] == x), x)
-        )
-        
-        if additional_params:
-            st.session_state.additional_params = additional_params
-        elif 'additional_params' not in st.session_state:
-            st.session_state.additional_params = []
-    
-    # Database/Cache section
-    st.header("Database Cache")
-    
-    # Get recent locations from database
-    recent_locations = db.get_recent_locations(limit=5)
-    
-    if recent_locations:
-        st.markdown("#### Recently Searched Locations")
-        for loc in recent_locations:
-            if st.button(f"{loc['name']}", key=f"loc_{loc['id']}"):
-                st.session_state.location = {
-                    "lat": loc['lat'],
-                    "lon": loc['lon'],
-                    "display_name": loc['name']
-                }
-                st.rerun()
-    
-    # Display model run info
-    latest_run = db.get_latest_model_run("GDPS")
-    if latest_run:
-        st.markdown(f"**Latest GDPS Model Run:** {latest_run.strftime('%Y-%m-%d %H:%M UTC')}")
-    
-    # Database statistics
-    with st.expander("Database Statistics"):
-        # Get database stats
-        try:
-            with db.engine.connect() as connection:
-                # Count of locations
-                location_count = connection.execute(
-                    text("SELECT COUNT(*) FROM locations")
-                ).scalar()
-                
-                # Count of forecast data points
-                forecast_count = connection.execute(
-                    text("SELECT COUNT(*) FROM forecast_data")
-                ).scalar()
-                
-                # Count of warnings
-                warning_count = connection.execute(
-                    text("SELECT COUNT(*) FROM weather_warnings")
-                ).scalar()
-                
-                # Count of model runs
-                model_run_count = connection.execute(
-                    text("SELECT COUNT(*) FROM model_runs")
-                ).scalar()
-                
-                # Recent parameter distribution
-                parameter_dist = connection.execute(
-                    text("""
-                        SELECT parameter_code, COUNT(*) as count
-                        FROM forecast_data
-                        GROUP BY parameter_code
-                        ORDER BY count DESC
-                        LIMIT 5
-                    """)
-                ).fetchall()
-                
-                # Display stats
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Locations Stored", location_count)
-                    st.metric("Model Runs Tracked", model_run_count)
-                
-                with col2:
-                    st.metric("Forecast Data Points", forecast_count)
-                    st.metric("Weather Warnings", warning_count)
-                
-                # Parameter distribution
-                if parameter_dist:
-                    st.markdown("#### Parameters in Database")
-                    param_data = pd.DataFrame(parameter_dist, columns=["Parameter", "Count"])
-                    st.bar_chart(param_data.set_index("Parameter"))
-                
-        except Exception as e:
-            st.error(f"Error fetching database statistics: {e}")
-    
-    # Cache clear button
-    if st.button("Clear Old Forecast Data (>7 days)"):
-        success = db.clear_old_data(days_to_keep=7)
-        if success:
-            st.success("Successfully cleared old forecast data")
+                st.sidebar.error("Location not found. Please try another search term.")
         else:
-            st.error("Failed to clear old data")
+            st.sidebar.error(f"Error geocoding location: {response.status_code}")
+    except Exception as e:
+        st.sidebar.error(f"Error: {str(e)}")
+
+# Display current coordinates
+st.sidebar.write(f"**Coordinates:** {st.session_state.lat:.4f}, {st.session_state.lon:.4f}")
+
+# Forecast options
+st.sidebar.header("Forecast Options")
+forecast_days = st.sidebar.slider("Forecast Days", min_value=1, max_value=10, value=5)
+forecast_elements = st.sidebar.multiselect(
+    "Forecast Elements",
+    ["Temperature", "Precipitation", "Wind", "Humidity", "Pressure", "Severe Weather"],
+    default=["Temperature", "Precipitation", "Severe Weather"]
+)
+
+# Main content - two columns
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    st.header(f"Weather Forecast for {st.session_state.location}")
     
-    # About section
-    st.header("About")
+    # Get current weather data using Meteostat if not already loaded
+    if not st.session_state.current_weather:
+        with st.spinner("Loading current weather..."):
+            try:
+                # Create Point for the location
+                location = Point(st.session_state.lat, st.session_state.lon)
+                
+                # Get hourly data for today
+                time_now = datetime.now()
+                start = time_now - timedelta(hours=24)  # Get last 24 hours to ensure we have data
+                end = time_now
+                
+                # Fetch hourly data
+                data = Hourly(location, start, end)
+                df = data.fetch()
+                
+                if not df.empty:
+                    # Get the latest hour's data
+                    latest = df.iloc[-1]
+                    st.session_state.current_weather = {
+                        'temp': latest.get('temp'),
+                        'dwpt': latest.get('dwpt'),
+                        'rhum': latest.get('rhum'),
+                        'prcp': latest.get('prcp'),
+                        'wdir': latest.get('wdir'),
+                        'wspd': latest.get('wspd'),
+                        'pres': latest.get('pres'),
+                        'time': latest.name,
+                    }
+                else:
+                    # If hourly data is not available, try daily data
+                    daily_data = Daily(location, time_now.date() - timedelta(days=1), time_now.date())
+                    daily_df = daily_data.fetch()
+                    
+                    if not daily_df.empty:
+                        latest = daily_df.iloc[-1]
+                        st.session_state.current_weather = {
+                            'temp': latest.get('tavg'),
+                            'tmin': latest.get('tmin'),
+                            'tmax': latest.get('tmax'),
+                            'prcp': latest.get('prcp'),
+                            'wspd': latest.get('wspd'),
+                            'pres': latest.get('pres'),
+                            'time': latest.name,
+                        }
+            except Exception as e:
+                logger.error(f"Error fetching current weather: {e}")
+                st.error("Could not fetch current weather data. Using forecast data instead.")
+    
+    # Display current weather if available
+    if st.session_state.current_weather:
+        st.subheader("Current Conditions")
+        
+        # Create current conditions display
+        current = st.session_state.current_weather
+        
+        # Format time
+        if isinstance(current.get('time'), pd.Timestamp):
+            time_str = current['time'].strftime("%Y-%m-%d %H:%M")
+        else:
+            time_str = "Unknown"
+        
+        # Create metrics in columns
+        curr_col1, curr_col2, curr_col3, curr_col4 = st.columns(4)
+        
+        with curr_col1:
+            if 'temp' in current and current['temp'] is not None:
+                st.metric("Temperature", f"{current['temp']:.1f}°C")
+            if 'tmin' in current and current['tmin'] is not None and 'tmax' in current and current['tmax'] is not None:
+                st.metric("Min/Max", f"{current['tmin']:.1f}°C / {current['tmax']:.1f}°C")
+                
+        with curr_col2:
+            if 'rhum' in current and current['rhum'] is not None:
+                st.metric("Humidity", f"{current['rhum']:.0f}%")
+            if 'dwpt' in current and current['dwpt'] is not None:
+                st.metric("Dew Point", f"{current['dwpt']:.1f}°C")
+                
+        with curr_col3:
+            if 'wspd' in current and current['wspd'] is not None:
+                st.metric("Wind Speed", f"{current['wspd']:.1f} km/h")
+            if 'wdir' in current and current['wdir'] is not None:
+                st.metric("Wind Direction", f"{current['wdir']:.0f}°")
+                
+        with curr_col4:
+            if 'prcp' in current and current['prcp'] is not None:
+                st.metric("Precipitation", f"{current['prcp']:.1f} mm")
+            if 'pres' in current and current['pres'] is not None:
+                st.metric("Pressure", f"{current['pres']:.0f} hPa")
+                
+        st.caption(f"Last updated: {time_str}")
+    
+    # Fetch forecast data using Meteostat if not already loaded
+    if not st.session_state.forecast_data:
+        with st.spinner("Loading forecast data..."):
+            try:
+                # Create Point for the location
+                location = Point(st.session_state.lat, st.session_state.lon)
+                
+                # Set time period
+                start = datetime.now()
+                end = start + timedelta(days=forecast_days)
+                
+                # Fetch daily data (more reliable for forecasts)
+                data = Daily(location, start.date(), end.date())
+                df = data.fetch()
+                
+                if not df.empty:
+                    st.session_state.forecast_data = df
+            except Exception as e:
+                logger.error(f"Error fetching forecast data: {e}")
+                st.error("Could not fetch forecast data. Please try again later.")
+    
+    # Display forecast data if available
+    if isinstance(st.session_state.forecast_data, pd.DataFrame) and not st.session_state.forecast_data.empty:
+        st.subheader("Weather Forecast")
+        
+        df = st.session_state.forecast_data
+        
+        # Temperature forecast plot if selected
+        if "Temperature" in forecast_elements and any(col in df.columns for col in ['tmin', 'tmax', 'tavg']):
+            # Create temperature plot with Plotly for interactivity
+            fig = go.Figure()
+            
+            # Add temperature traces
+            if all(col in df.columns for col in ['tmin', 'tmax']):
+                # Create temperature range area
+                fig.add_trace(go.Scatter(
+                    x=df.index,
+                    y=df['tmax'],
+                    fill=None,
+                    mode='lines',
+                    line_color='rgba(255,0,0,0.5)',
+                    name='Max Temp'
+                ))
+                
+                fig.add_trace(go.Scatter(
+                    x=df.index,
+                    y=df['tmin'],
+                    fill='tonexty',
+                    mode='lines',
+                    line_color='rgba(0,0,255,0.5)',
+                    name='Min Temp'
+                ))
+                
+                if 'tavg' in df.columns:
+                    fig.add_trace(go.Scatter(
+                        x=df.index,
+                        y=df['tavg'],
+                        mode='lines+markers',
+                        line=dict(color='black', width=2),
+                        name='Avg Temp'
+                    ))
+            elif 'tavg' in df.columns:
+                fig.add_trace(go.Scatter(
+                    x=df.index,
+                    y=df['tavg'],
+                    mode='lines+markers',
+                    line=dict(color='black', width=2),
+                    name='Avg Temp'
+                ))
+            
+            # Layout
+            fig.update_layout(
+                title='Temperature Forecast',
+                xaxis_title='Date',
+                yaxis_title='Temperature (°C)',
+                hovermode='x unified',
+                height=400
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Precipitation forecast if selected
+        if "Precipitation" in forecast_elements and 'prcp' in df.columns:
+            # Create precipitation bar chart
+            fig = px.bar(
+                df,
+                x=df.index,
+                y='prcp',
+                labels={'prcp': 'Precipitation (mm)', 'x': 'Date'},
+                title='Precipitation Forecast',
+                color_discrete_sequence=['blue']
+            )
+            
+            # Add horizontal line for moderate rain threshold (10mm)
+            fig.add_shape(
+                type="line",
+                x0=df.index.min(),
+                y0=10,
+                x1=df.index.max(),
+                y1=10,
+                line=dict(color="orange", width=2, dash="dash"),
+            )
+            
+            # Add annotation for the line
+            fig.add_annotation(
+                x=df.index.max(),
+                y=10,
+                text="Moderate Rain",
+                showarrow=False,
+                yshift=10
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Wind forecast if selected
+        if "Wind" in forecast_elements and 'wspd' in df.columns:
+            # Create wind speed line chart
+            fig = px.line(
+                df,
+                x=df.index,
+                y='wspd',
+                labels={'wspd': 'Wind Speed (km/h)', 'x': 'Date'},
+                title='Wind Speed Forecast',
+                markers=True
+            )
+            
+            # Add threshold lines for wind categories
+            fig.add_shape(
+                type="line",
+                x0=df.index.min(),
+                y0=20,
+                x1=df.index.max(),
+                y1=20,
+                line=dict(color="yellow", width=2, dash="dash"),
+            )
+            
+            fig.add_shape(
+                type="line",
+                x0=df.index.min(),
+                y0=40,
+                x1=df.index.max(),
+                y1=40,
+                line=dict(color="orange", width=2, dash="dash"),
+            )
+            
+            fig.add_shape(
+                type="line",
+                x0=df.index.min(),
+                y0=60,
+                x1=df.index.max(),
+                y1=60,
+                line=dict(color="red", width=2, dash="dash"),
+            )
+            
+            # Add annotations
+            fig.add_annotation(x=df.index.max(), y=20, text="Breezy", showarrow=False, yshift=10)
+            fig.add_annotation(x=df.index.max(), y=40, text="Strong Wind", showarrow=False, yshift=10)
+            fig.add_annotation(x=df.index.max(), y=60, text="Gale", showarrow=False, yshift=10)
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Humidity forecast if selected
+        if "Humidity" in forecast_elements and 'rhum' in df.columns:
+            # Create humidity line chart
+            fig = px.line(
+                df,
+                x=df.index,
+                y='rhum',
+                labels={'rhum': 'Relative Humidity (%)', 'x': 'Date'},
+                title='Humidity Forecast',
+                markers=True
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Pressure forecast if selected
+        if "Pressure" in forecast_elements and 'pres' in df.columns:
+            # Create pressure line chart
+            fig = px.line(
+                df,
+                x=df.index,
+                y='pres',
+                labels={'pres': 'Pressure (hPa)', 'x': 'Date'},
+                title='Atmospheric Pressure Forecast',
+                markers=True
+            )
+            
+            # Add reference line for standard pressure
+            fig.add_shape(
+                type="line",
+                x0=df.index.min(),
+                y0=1013.25,
+                x1=df.index.max(),
+                y1=1013.25,
+                line=dict(color="gray", width=2, dash="dash"),
+            )
+            
+            # Add annotation for the line
+            fig.add_annotation(
+                x=df.index.max(),
+                y=1013.25,
+                text="Standard Pressure",
+                showarrow=False,
+                yshift=10
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+    
+    # Create a map with the location
+    st.subheader("Location Map")
+    m = folium.Map(location=[st.session_state.lat, st.session_state.lon], zoom_start=10)
+    
+    # Add marker for the location
+    folium.Marker(
+        [st.session_state.lat, st.session_state.lon],
+        popup=st.session_state.location,
+        icon=folium.Icon(color="red", icon="info-sign")
+    ).add_to(m)
+    
+    # Display the map
+    folium_static(m)
+
+with col2:
+    # Severe Weather Alerts
+    st.header("Severe Weather Alerts")
+    
+    # Try to fetch alerts from Weather.gov (NWS) API for US locations
+    if not st.session_state.alerts:
+        with st.spinner("Checking for severe weather alerts..."):
+            try:
+                # First check if the location is in the US (approximately)
+                is_us_location = (24 <= st.session_state.lat <= 50) and (-125 <= st.session_state.lon <= -66)
+                
+                if is_us_location:
+                    # Using weather-gov package
+                    from weather_gov import alerts
+                    
+                    # Get alerts near the location (within 25 miles)
+                    alert_data = alerts.get_active_alerts(
+                        lat=st.session_state.lat,
+                        lon=st.session_state.lon,
+                        radius=25
+                    )
+                    
+                    if alert_data and 'features' in alert_data:
+                        st.session_state.alerts = alert_data['features']
+            except Exception as e:
+                logger.error(f"Error fetching weather alerts: {e}")
+                st.warning("Could not fetch official weather alerts. Checking for potential severe weather conditions...")
+    
+    # Display alerts if any
+    if st.session_state.alerts and len(st.session_state.alerts) > 0:
+        for alert in st.session_state.alerts:
+            properties = alert.get('properties', {})
+            
+            # Alert severity color coding
+            severity = properties.get('severity', '').lower()
+            if severity == 'extreme':
+                box_color = "#FF0000"  # Red
+            elif severity == 'severe':
+                box_color = "#FFA500"  # Orange
+            elif severity == 'moderate':
+                box_color = "#FFFF00"  # Yellow
+            else:
+                box_color = "#00FF00"  # Green
+            
+            # Create alert box with information
+            st.markdown(
+                f"""
+                <div style="background-color: {box_color}30; padding: 10px; border-left: 5px solid {box_color};">
+                    <h3 style="color: {box_color};">{properties.get('event', 'Weather Alert')}</h3>
+                    <p><strong>Severity:</strong> {properties.get('severity', 'Unknown').capitalize()}</p>
+                    <p><strong>Issued:</strong> {properties.get('sent', 'Unknown')}</p>
+                    <p><strong>Expires:</strong> {properties.get('expires', 'Unknown')}</p>
+                    <details>
+                        <summary>View Details</summary>
+                        <p>{properties.get('description', 'No details available')}</p>
+                    </details>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+    else:
+        # If no official alerts, check forecast data for potential severe weather
+        severe_conditions = []
+        
+        # Check if we have forecast data
+        if isinstance(st.session_state.forecast_data, pd.DataFrame) and not st.session_state.forecast_data.empty:
+            df = st.session_state.forecast_data
+            
+            # Check for heavy precipitation
+            if 'prcp' in df.columns and df['prcp'].max() >= 20:
+                heavy_rain_days = df[df['prcp'] >= 20].index.tolist()
+                if heavy_rain_days:
+                    severe_conditions.append({
+                        'condition': 'Heavy Precipitation',
+                        'description': f"Potential heavy rainfall ({df['prcp'].max():.1f} mm) on {heavy_rain_days[0].strftime('%Y-%m-%d')}",
+                        'severity': 'Moderate',
+                        'date': heavy_rain_days[0]
+                    })
+            
+            # Check for strong winds
+            if 'wspd' in df.columns and df['wspd'].max() >= 40:
+                strong_wind_days = df[df['wspd'] >= 40].index.tolist()
+                if strong_wind_days:
+                    severe_conditions.append({
+                        'condition': 'Strong Winds',
+                        'description': f"Strong winds ({df['wspd'].max():.1f} km/h) predicted on {strong_wind_days[0].strftime('%Y-%m-%d')}",
+                        'severity': 'Moderate',
+                        'date': strong_wind_days[0]
+                    })
+            
+            # Check for extreme temperatures
+            if 'tmax' in df.columns and df['tmax'].max() >= 35:
+                hot_days = df[df['tmax'] >= 35].index.tolist()
+                if hot_days:
+                    severe_conditions.append({
+                        'condition': 'Extreme Heat',
+                        'description': f"Very high temperatures ({df['tmax'].max():.1f}°C) expected on {hot_days[0].strftime('%Y-%m-%d')}",
+                        'severity': 'Moderate',
+                        'date': hot_days[0]
+                    })
+            
+            if 'tmin' in df.columns and df['tmin'].min() <= -10:
+                cold_days = df[df['tmin'] <= -10].index.tolist()
+                if cold_days:
+                    severe_conditions.append({
+                        'condition': 'Extreme Cold',
+                        'description': f"Very low temperatures ({df['tmin'].min():.1f}°C) expected on {cold_days[0].strftime('%Y-%m-%d')}",
+                        'severity': 'Moderate',
+                        'date': cold_days[0]
+                    })
+            
+            # Check for rapid pressure changes
+            if 'pres' in df.columns and len(df) > 1:
+                df['pres_change'] = df['pres'].diff()
+                if df['pres_change'].min() <= -5:
+                    pressure_drop_days = df[df['pres_change'] <= -5].index.tolist()
+                    if pressure_drop_days:
+                        severe_conditions.append({
+                            'condition': 'Rapid Pressure Drop',
+                            'description': f"Significant pressure drop ({df['pres_change'].min():.1f} hPa) on {pressure_drop_days[0].strftime('%Y-%m-%d')}",
+                            'severity': 'Moderate',
+                            'date': pressure_drop_days[0]
+                        })
+        
+        # Display potential severe weather conditions
+        if severe_conditions:
+            st.subheader("Potential Severe Weather")
+            for condition in severe_conditions:
+                severity = condition['severity'].lower()
+                if severity == 'high':
+                    box_color = "#FFA500"  # Orange
+                else:
+                    box_color = "#FFFF00"  # Yellow
+                
+                st.markdown(
+                    f"""
+                    <div style="background-color: {box_color}30; padding: 10px; border-left: 5px solid {box_color};">
+                        <h3 style="color: {box_color};">{condition['condition']}</h3>
+                        <p>{condition['description']}</p>
+                        <p><small>Potential Impact: {condition['severity']}</small></p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        else:
+            st.info("No severe weather alerts or conditions detected for this location.")
+    
+    # Weather Forecast Interpretation Guide
+    st.header("Interpretation Guide")
+    
+    with st.expander("Understanding the Forecast"):
+        st.markdown("""
+        ### How to Read the Forecast
+
+        This forecast uses reliable meteorological data to help you prepare for upcoming weather conditions:
+
+        - **Temperature Range**: The shaded area between minimum and maximum temperatures shows the expected temperature variation for each day.
+        
+        - **Precipitation**: Values indicate expected rainfall in millimeters (mm).
+            - Light rain: 0.5-5 mm
+            - Moderate rain: 5-20 mm
+            - Heavy rain: >20 mm
+        
+        - **Wind Speed**:
+            - Light: 5-20 km/h
+            - Moderate: 20-40 km/h
+            - Strong: 40-60 km/h
+            - Gale: >60 km/h
+        
+        - **Pressure Trends**: 
+            - Falling pressure often indicates approaching storms
+            - Rising pressure typically suggests improving weather
+        """)
+    
+    with st.expander("Severe Weather Indicators"):
+        st.markdown("""
+        ### Signs of Potential Severe Weather
+
+        Be alert for these indicators in the forecast:
+
+        1. **Rapid pressure drops** (>5 hPa in 24 hours)
+        2. **Heavy precipitation** (>20 mm in 24 hours)
+        3. **Strong winds** (>40 km/h sustained)
+        4. **Extreme temperatures** (varies by region and season)
+        5. **Convergence of multiple conditions** (e.g., strong winds with heavy precipitation)
+
+        ### Weather Alert Severity Levels
+
+        - **Minor**: Awareness recommended, minimal impact expected
+        - **Moderate**: Increased awareness and some precautions advised
+        - **Severe**: Significant impact possible, preventive actions recommended
+        - **Extreme**: Life-threatening conditions, immediate action required
+        """)
+    
+    # Data sources
+    st.header("Data Sources")
     st.markdown("""
-    This application provides comprehensive access to all parameters from the Global Deterministic Prediction System (GDPS 15km):
+    This application uses data from:
+    - **Meteostat**: Historical and forecast weather data
+    - **Weather.gov (NWS)**: Official US weather alerts and warnings
+    - **OpenStreetMap/Nominatim**: Location geocoding
     
-    - 30+ meteorological parameters at multiple atmospheric levels
-    - Global coverage with 15km horizontal resolution
-    - Supports forecasts up to 168 hours (7 days) ahead
-    - Detailed visualizations of temperature, precipitation, wind, pressure, and more
-    - Severe weather warning detection
-    - PostgreSQL database caching for improved performance
+    Last updated: """ + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    
+    # Disclaimer
+    st.caption("""
+    **Disclaimer**: This tool provides weather forecasts for informational purposes only.
+    Always consult official government weather services for critical weather decisions and emergencies.
     """)
 
-# Main content
-# Display current location
-st.markdown(f"### Forecast for: **{st.session_state.location['display_name']}**")
-st.markdown(f"Coordinates: {st.session_state.location['lat']:.4f}, {st.session_state.location['lon']:.4f}")
-
-# Display loading message
-with st.spinner("Fetching weather data..."):
-    data = {
-        "TMP_TGL_2": fetch_and_process_data(
-            st.session_state.location["lat"], 
-            st.session_state.location["lon"], 
-            "TMP_TGL_2", 
-            st.session_state.forecast_hours
-        ),
-        "APCP_SFC": fetch_and_process_data(
-            st.session_state.location["lat"], 
-            st.session_state.location["lon"], 
-            "APCP_SFC", 
-            st.session_state.forecast_hours
-        ),
-        "WIND_TGL_10": fetch_and_process_data(
-            st.session_state.location["lat"], 
-            st.session_state.location["lon"], 
-            "WIND_TGL_10", 
-            st.session_state.forecast_hours
-        ),
-        "RH_TGL_2": fetch_and_process_data(
-            st.session_state.location["lat"], 
-            st.session_state.location["lon"], 
-            "RH_TGL_2", 
-            st.session_state.forecast_hours
-        )
-    }
+# Function to calculate the Fire Weather Index (for future use)
+def calculate_fire_weather_index(temp, humidity, wind_speed, rainfall):
+    """
+    Calculate a simple Fire Weather Index (FWI) based on key weather parameters
     
-    # Fetch additional parameters if any are selected
-    if 'additional_params' in st.session_state and st.session_state.additional_params:
-        for param in st.session_state.additional_params:
-            if param not in data:  # Only fetch if not already in data
-                data[param] = fetch_and_process_data(
-                    st.session_state.location["lat"],
-                    st.session_state.location["lon"],
-                    param,
-                    st.session_state.forecast_hours
-                )
-    
-    # Fetch warnings
-    warnings_data = fetch_weather_warnings(
-        st.session_state.location["lat"], 
-        st.session_state.location["lon"]
-    )
-    
-    # Identify potential severe weather conditions
-    severe_events = data_processor.identify_severe_weather(data)
-    
-    # Fetch grid data for map
-    grid_data = fetch_grid_data(
-        st.session_state.selected_parameter,
-        st.session_state.location["lat"],
-        st.session_state.location["lon"],
-        st.session_state.forecast_hour_for_map
-    )
-    
-    # Create forecast summary
-    forecast_summary = data_processor.get_forecast_summary(data)
-
-# Display severe weather warnings if any
-if severe_events or warnings_data:
-    st.markdown("## ⚠️ Severe Weather Alerts")
-    
-    warning_tabs = st.tabs(["Forecast Warnings", "Official Alerts", "Lightning Wizard Maps"])
-    
-    with warning_tabs[0]:
-        if severe_events:
-            # Display warnings from data analysis
-            warning_viz = visualizer.create_severe_warning_visual(severe_events)
-            if warning_viz:
-                st.plotly_chart(warning_viz, use_container_width=True)
-            
-            for event in severe_events:
-                st.warning(
-                    f"**{event['type']}**: {event['description']} "
-                    f"(Threshold: {event['threshold']})"
-                )
-        else:
-            st.info("No severe weather conditions detected in the forecast.")
-    
-    with warning_tabs[1]:
-        if warnings_data:
-            # Display official warnings
-            for warning in warnings_data:
-                st.error(
-                    f"**{warning.get('title', 'Weather Warning')}**: {warning.get('description', 'No details provided')}"
-                )
-        else:
-            st.info("No official weather alerts in effect for this location.")
-    
-    with warning_tabs[2]:
-        st.markdown("### ⚡ Lightning Wizard Severe Weather Maps")
-        st.markdown("These maps provide the latest severe weather forecasts from Lightning Wizard.")
+    Args:
+        temp (float): Temperature in Celsius
+        humidity (float): Relative humidity in percent
+        wind_speed (float): Wind speed in km/h
+        rainfall (float): Rainfall in mm over the past 24 hours
         
-        # Create subtabs for different map types
-        lw_map_tabs = st.tabs(["Severe Weather", "Lightning", "Radar", "Satellite"])
+    Returns:
+        float: Fire Weather Index value and category
+    """
+    # Implement logic for fire weather index calculation
+    # This is a simplified version for demonstration
+    
+    # Adjust for recent rainfall
+    if rainfall > 10:
+        rainfall_factor = 0.2
+    elif rainfall > 5:
+        rainfall_factor = 0.5
+    elif rainfall > 0:
+        rainfall_factor = 0.8
+    else:
+        rainfall_factor = 1.0
+    
+    # Calculate base FWI
+    fwi = ((temp * 1.1) + (wind_speed * 0.7) - (humidity * 0.5)) * rainfall_factor
+    
+    # Clamp to reasonable range
+    fwi = max(0, min(100, fwi))
+    
+    # Determine category
+    if fwi >= 80:
+        category = "Extreme"
+    elif fwi >= 60:
+        category = "Very High"
+    elif fwi >= 40:
+        category = "High"
+    elif fwi >= 20:
+        category = "Moderate"
+    else:
+        category = "Low"
         
-        # Region selector (US or North America)
-        region = st.radio("Select Region", ["US", "North America"], horizontal=True)
-        region_code = "US" if region == "US" else "NA"
-        
-        with lw_map_tabs[0]:
-            # Display severe weather map
-            st.markdown("#### Severe Weather Forecast")
-            lightning_wizard.display_map_in_streamlit("severe_weather", region=region_code)
-            
-        with lw_map_tabs[1]:
-            # Display lightning map
-            st.markdown("#### Lightning Forecast")
-            lightning_wizard.display_map_in_streamlit("lightning", region=region_code)
-            
-        with lw_map_tabs[2]:
-            # Display radar map
-            st.markdown("#### Radar Map")
-            lightning_wizard.display_map_in_streamlit("radar", region=region_code)
-            
-        with lw_map_tabs[3]:
-            # Display satellite map
-            st.markdown("#### Satellite Imagery")
-            lightning_wizard.display_map_in_streamlit("satellite", region=region_code)
-        
-        st.markdown("---")
-        st.caption("Maps provided by [Lightning Wizard](https://www.lightningwizard.com/maps). Updated regularly.")
-
-# Create layout for main content
-col1, col2 = st.columns([3, 1])
-
-# Column 1: Map and main charts
-with col1:
-    # Map with selected parameter
-    st.markdown(f"### Weather Map: {next((p['name'] for p in map_params if p['code'] == st.session_state.selected_parameter), st.session_state.selected_parameter)}")
-    st.markdown(f"Forecast hour: +{st.session_state.forecast_hour_for_map}h")
-    
-    # Create map
-    weather_map = visualizer.create_weather_map(
-        grid_data,
-        st.session_state.location["lat"],
-        st.session_state.location["lon"],
-        next((p['name'] for p in map_params if p['code'] == st.session_state.selected_parameter), st.session_state.selected_parameter),
-        zoom=8
-    )
-    
-    # Option to add Lightning Wizard overlays
-    with st.expander("Add Lightning Wizard Map Overlays"):
-        col1, col2 = st.columns(2)
-        with col1:
-            overlay_types = st.multiselect(
-                "Select Map Overlays",
-                ["Lightning", "Radar", "Severe Weather", "Satellite"],
-                default=[]
-            )
-        with col2:
-            overlay_region = st.radio(
-                "Select Overlay Region",
-                ["US", "North America"],
-                horizontal=True
-            )
-            overlay_opacity = st.slider("Overlay Opacity", 0.1, 1.0, 0.7, 0.1)
-        
-        # Apply selected overlays
-        if overlay_types:
-            for overlay_type in overlay_types:
-                overlay_type_key = overlay_type.lower().replace(" ", "_")
-                weather_map = lightning_wizard.create_folium_overlay(
-                    overlay_type_key, 
-                    weather_map, 
-                    region="US" if overlay_region == "US" else "NA",
-                    opacity=overlay_opacity
-                )
-    
-    # Display map
-    folium_static(weather_map, width=800)
-    
-    # Add note about sample data
-    st.info("Note: This application is showing sample forecast data in demo mode.")
-    
-    # Temperature chart
-    if data["TMP_TGL_2"] is not None:
-        temp_fig = visualizer.plot_time_series(
-            data["TMP_TGL_2"], 
-            "Temperature", 
-            "°C"
-        )
-        st.plotly_chart(temp_fig, use_container_width=True)
-    
-    # Precipitation chart
-    if data["APCP_SFC"] is not None:
-        precip_fig = visualizer.plot_precipitation_bars(
-            data["APCP_SFC"]
-        )
-        st.plotly_chart(precip_fig, use_container_width=True)
-    
-    # Wind chart
-    if data["WIND_TGL_10"] is not None:
-        wind_fig = visualizer.plot_time_series(
-            data["WIND_TGL_10"], 
-            "Wind Speed", 
-            "km/h"
-        )
-        st.plotly_chart(wind_fig, use_container_width=True)
-        
-    # Display additional parameter charts if any are selected
-    if 'additional_params' in st.session_state and st.session_state.additional_params:
-        st.markdown("### Additional Parameter Charts")
-        
-        for param in st.session_state.additional_params:
-            if param in data and data[param] is not None:
-                # Get parameter info for proper labeling
-                param_info = next((p for p in map_params if p["code"] == param), None)
-                if param_info:
-                    param_name = param_info["name"]
-                    
-                    # Determine appropriate unit based on parameter type
-                    unit = ""
-                    if "TMP" in param or "TMAX" in param or "TMIN" in param:
-                        unit = "°C"
-                    elif "PCP" in param or "SNOW" in param or "WEASD" in param:
-                        unit = "mm"
-                    elif "WIND" in param or "GUST" in param:
-                        unit = "km/h"
-                    elif "PRMSL" in param or "PRES" in param:
-                        unit = "hPa"
-                    elif "RH" in param or "CDC" in param:
-                        unit = "%"
-                    elif "HGT" in param:
-                        unit = "m"
-                    elif "CAPE" in param or "CIN" in param:
-                        unit = "J/kg"
-                    
-                    # Check if parameter requires special chart type
-                    if "APCP" in param or "PCP" in param:
-                        fig = visualizer.plot_precipitation_bars(data[param])
-                    elif "WDIR" in param:
-                        # For direction parameters, use specific visualization if implemented
-                        # For now, fallback to regular chart
-                        fig = visualizer.plot_time_series(data[param], param_name, unit)
-                    else:
-                        fig = visualizer.plot_time_series(data[param], param_name, unit)
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-
-# Column 2: Forecast summary
-with col2:
-    st.markdown("### Forecast Summary")
-    
-    # Summary table
-    summary_table = visualizer.create_forecast_summary_table(forecast_summary)
-    if summary_table:
-        st.plotly_chart(summary_table, use_container_width=True)
-    
-    # Current conditions
-    if data["TMP_TGL_2"] is not None and not data["TMP_TGL_2"].empty:
-        current_temp = data["TMP_TGL_2"].iloc[0]['value'] if 'value' in data["TMP_TGL_2"].columns else "N/A"
-        st.metric("Current Temperature", f"{current_temp:.1f}°C")
-    
-    if data["RH_TGL_2"] is not None and not data["RH_TGL_2"].empty:
-        current_rh = data["RH_TGL_2"].iloc[0]['value'] if 'value' in data["RH_TGL_2"].columns else "N/A"
-        st.metric("Current Humidity", f"{current_rh:.0f}%")
-    
-    if data["WIND_TGL_10"] is not None and not data["WIND_TGL_10"].empty:
-        current_wind = data["WIND_TGL_10"].iloc[0]['value'] if 'value' in data["WIND_TGL_10"].columns else "N/A"
-        st.metric("Current Wind Speed", f"{current_wind:.1f} km/h")
-    
-    # Calculate and display feels-like temperature if we have both temp and wind
-    if (data["TMP_TGL_2"] is not None and not data["TMP_TGL_2"].empty and
-        data["WIND_TGL_10"] is not None and not data["WIND_TGL_10"].empty):
-        try:
-            wind_chill = data_processor.calculate_wind_chill(
-                data["TMP_TGL_2"].head(1), 
-                data["WIND_TGL_10"].head(1)
-            )
-            if wind_chill is not None and 'wind_chill' in wind_chill.columns:
-                feels_like = wind_chill.iloc[0]['wind_chill']
-                if not np.isnan(feels_like):
-                    st.metric("Feels Like", f"{feels_like:.1f}°C")
-        except Exception as e:
-            logger.error(f"Error calculating feels-like temperature: {e}")
-    
-    # Data source tabs
-    st.markdown("### Data Source")
-    
-    data_source_tab1, data_source_tab2 = st.tabs(["GDPS Information", "Alternative Sources"])
-    
-    with data_source_tab1:
-        st.markdown("""
-        ### Global Deterministic Prediction System (GDPS)
-        
-        The GDPS is Environment Canada's operational global numerical weather prediction system with a horizontal resolution of approximately 15 km.
-        
-        **Key Features:**
-        - Global coverage with 15 km horizontal resolution
-        - Runs four times daily at 00Z, 06Z, 12Z, and 18Z
-        - Provides forecasts up to 240 hours (10 days) ahead
-        - Includes over 30 meteorological parameters at multiple atmospheric levels
-        
-        **Parameter Naming Convention:**
-        - TGL: Values at a specific height above ground level (e.g., TGL_2 = 2 meters)
-        - ISBL: Values at a specific pressure level (e.g., ISBL_500 = 500 hPa)
-        - SFC: Surface values
-        """)
-        
-    with data_source_tab2:
-        st.markdown("""
-        ### Alternative Weather Data Sources
-        
-        For operational use, consider these alternative data sources:
-        
-        1. **Environment Canada MSC GeoMet API**
-           - Official API for Environment Canada data
-           - Includes GDPS, RDPS, HRDPS, and other models
-           - Website: [MSC GeoMet](https://eccc-msc.github.io/open-data/msc-geomet/readme_en/)
-        
-        2. **NOAA Global Forecast System (GFS)**
-           - Global model with 0.25° resolution
-           - Free and open access
-           - Website: [NOAA GFS](https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast)
-        
-        3. **European Centre for Medium-Range Weather Forecasts (ECMWF)**
-           - High precision global forecasts
-           - Some data available freely, premium data requires subscription
-           - Website: [ECMWF](https://www.ecmwf.int/en/forecasts)
-        """)
-    
-    # Last updated information
-    st.markdown(f"*Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
-
-# Parameter reference section (moved outside the columns to avoid nesting issues)
-st.markdown("---")
-st.markdown("## GDPS Parameter Reference")
-st.markdown("Hover over each section to see detailed parameter descriptions.")
-
-param_col1, param_col2 = st.columns(2)
-
-with param_col1:
-    with st.expander("Temperature Parameters"):
-        st.markdown("""
-        - **TMP_TGL_2**: Air temperature at 2 meters above ground
-        - **TMP_TGL_0**: Temperature at surface level
-        - **TMP_ISBL_500**: Temperature at 500 hPa pressure level (approx. 5.5 km altitude)
-        - **TMP_ISBL_850**: Temperature at 850 hPa pressure level (approx. 1.5 km altitude)
-        - **TMAX_TGL_2**: Maximum temperature at 2 meters above ground
-        - **TMIN_TGL_2**: Minimum temperature at 2 meters above ground
-        """)
-    
-    with st.expander("Precipitation Parameters"):
-        st.markdown("""
-        - **APCP_SFC**: Total precipitation accumulation
-        - **ACPCP_SFC**: Convective precipitation accumulation (thunderstorms)
-        - **SNOD_SFC**: Snow depth on ground
-        - **WEASD_SFC**: Water equivalent of accumulated snow depth
-        - **CRAIN_SFC**: Categorical rain (yes=1/no=0)
-        - **CSNOW_SFC**: Categorical snow (yes=1/no=0)
-        """)
-    
-    with st.expander("Wind Parameters"):
-        st.markdown("""
-        - **WIND_TGL_10**: Wind speed at 10 meters above ground
-        - **WDIR_TGL_10**: Wind direction at 10 meters (degrees, 0=North, 90=East)
-        - **GUST_TGL_10**: Wind gust at 10 meters above ground
-        - **UGRD_TGL_10**: U-component of wind at 10 meters (east-west)
-        - **VGRD_TGL_10**: V-component of wind at 10 meters (north-south)
-        - **WIND_ISBL_250**: Wind speed at 250 hPa (approx. 10.5 km, jet stream level)
-        """)
-
-with param_col2:
-    with st.expander("Pressure & Height Parameters"):
-        st.markdown("""
-        - **PRMSL_MSL**: Mean sea level pressure
-        - **PRES_SFC**: Surface pressure
-        - **HGT_ISBL_500**: 500 hPa geopotential height (altitude of 500 hPa pressure level)
-        """)
-    
-    with st.expander("Humidity & Moisture Parameters"):
-        st.markdown("""
-        - **RH_TGL_2**: Relative humidity at 2 meters
-        - **RH_ISBL_700**: Relative humidity at 700 hPa level (mid-troposphere)
-        - **SPFH_TGL_2**: Specific humidity at 2 meters (mass of water vapor per unit mass of air)
-        - **PWAT_EATM**: Precipitable water (total column water vapor)
-        """)
-    
-    with st.expander("Cloud Parameters"):
-        st.markdown("""
-        - **TCDC_SFC**: Total cloud cover (percentage)
-        - **LCDC_LOW**: Low cloud cover (below 2 km)
-        - **MCDC_MID**: Medium cloud cover (2-6 km)
-        - **HCDC_HIGH**: High cloud cover (above 6 km)
-        """)
-    
-    with st.expander("Severe Weather Parameters"):
-        st.markdown("""
-        - **CAPE_SFC**: Convective Available Potential Energy (thunderstorm potential)
-        - **CIN_SFC**: Convective Inhibition (resistance to thunderstorm formation)
-        - **LFTX_SFC**: Lifted Index (atmospheric stability measure)
-        - **VIS_SFC**: Surface visibility
-        """)
-
-# Footer
-st.markdown("---")
-st.markdown("GDPS 15km Weather Forecast Application | Environment Canada Global Deterministic Prediction System")
+    return fwi, category
