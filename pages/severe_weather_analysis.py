@@ -46,12 +46,50 @@ else:
     default_lon = -73.5673
     default_location_name = "Montreal, Quebec, Canada"
 
-location_name = st.sidebar.text_input("Location Name", value=default_location_name)
-col1, col2 = st.sidebar.columns(2)
-with col1:
-    lat = st.number_input("Latitude", value=default_lat, format="%.4f", min_value=-90.0, max_value=90.0)
-with col2:
-    lon = st.number_input("Longitude", value=default_lon, format="%.4f", min_value=-180.0, max_value=180.0)
+# Import geocode function from app.py
+import sys
+sys.path.append('./')  # Add root directory to path
+try:
+    from app import geocode_location
+except ImportError:
+    # If import fails, define a basic geocode function
+    def geocode_location(location_name):
+        import requests
+        try:
+            url = f"https://nominatim.openstreetmap.org/search?q={location_name}&format=json&limit=1"
+            response = requests.get(url, headers={"User-Agent": "Weather App"})
+            data = response.json()
+            if data:
+                return {
+                    "lat": float(data[0]["lat"]),
+                    "lon": float(data[0]["lon"]),
+                    "display_name": data[0]["display_name"]
+                }
+            return None
+        except Exception as e:
+            st.error(f"Error geocoding location: {e}")
+            return None
+
+# Location search interface
+location_input = st.sidebar.text_input("Search Location", value=default_location_name)
+search_button = st.sidebar.button("Search Location")
+
+if search_button and location_input:
+    with st.sidebar.spinner("Searching location..."):
+        geocoded = geocode_location(location_input)
+        if geocoded:
+            st.session_state.location = geocoded
+            st.sidebar.success(f"Found: {geocoded['display_name']}")
+            st.rerun()  # Rerun the app with the new location
+        else:
+            st.sidebar.error("Location not found. Please try a different search term.")
+
+# Display current coordinates (but don't allow direct editing)
+st.sidebar.markdown(f"**Current Coordinates:** {default_lat:.4f}, {default_lon:.4f}")
+
+# Store the coordinates in variables for use in the analysis
+lat = default_lat
+lon = default_lon
 
 # Model selection
 model_options = ["GFS", "NAM", "HRRR", "RAP"]
