@@ -2,6 +2,14 @@
 Severe Weather Analysis - Advanced meteorological parameters using SHARPpy
 """
 import streamlit as st
+
+# Page configuration must be first Streamlit command
+st.set_page_config(
+    page_title="Severe Weather Analysis",
+    page_icon="⚡",
+    layout="wide"
+)
+
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -13,13 +21,7 @@ from streamlit_folium import folium_static
 import io
 import matplotlib.pyplot as plt
 from utils.data_fetcher import MeteoDataFetcher
-
-# Page configuration
-st.set_page_config(
-    page_title="Severe Weather Analysis",
-    page_icon="⚡",
-    layout="wide"
-)
+import requests
 
 # Title and introduction
 st.title("⚡ Severe Weather Analysis")
@@ -90,6 +92,7 @@ st.sidebar.markdown(f"**Current Coordinates:** {default_lat:.4f}, {default_lon:.
 # Store the coordinates in variables for use in the analysis
 lat = default_lat
 lon = default_lon
+location_name = default_location_name
 
 # Model selection
 model_options = ["GFS", "NAM", "HRRR", "RAP"]

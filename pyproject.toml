@@ -26,4 +26,5 @@ dependencies = [
     "shapely>=2.1.0",
     "sharppy>=1.4.0a3",
     "joblib>=1.4.2",
+    "cartopy>=0.24.1",
 ]

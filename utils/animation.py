@@ -197,6 +197,10 @@ class ForecastAnimation:
             
             if not frames:
                 st.error(f"Could not download any {model} {parameter} forecast images.")
+                st.info("This error can occur when the external image sources are not available. We cannot generate synthetic forecast images as a fallback since that would violate data integrity policies. You can try a different parameter or check back later.")
+                # Show a direct link to the source website for manual check
+                src_url = f"https://meteocentre.com/plus/{model.lower()}"
+                st.markdown(f"You can try checking the source directly at: [{src_url}]({src_url})")
                 return False
             
             # Create animation controls
