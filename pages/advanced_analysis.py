@@ -138,16 +138,17 @@ with col1:
                 height_diff = -8000 * np.log(p / surface_pressure)  # Simplified height calculation
             
             # Calculate temperature and dewpoint at this level
-            temp_at_level = surface_temp - 6.5 * (height_diff / 1000) * units.degC
-            dewpoint_at_level = surface_dewpoint - 2.0 * (height_diff / 1000) * units.degC
+            # Note: Using magnitude values to avoid units complications
+            temp_lapse = 6.5 * (height_diff / 1000)
+            dewpoint_lapse = 2.0 * (height_diff / 1000)
+            
+            temp_at_level = surface_temp - temp_lapse * units.delta_degC
+            dewpoint_at_level = surface_dewpoint - dewpoint_lapse * units.delta_degC
             
             temperature_profile.append(temp_at_level)
             dewpoint_profile.append(dewpoint_at_level)
         
-        # Convert to arrays with units
-        temperature_profile = np.array(temperature_profile)
-        dewpoint_profile = np.array(dewpoint_profile)
-        
+        # Create profile dictionary with separate lists
         return {
             'pressure': pressure_levels,
             'temperature': temperature_profile,
